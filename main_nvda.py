@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("NVDA + NASDAQ Trading Assistant")
         self.resize(1600, 950)
-        self.schema_path = "schemat_json_rezim.json"
+        self.schema_path = "dane_json_nvda.json"
         self.current_setup = None
         self.nvda_interval = "1m"
         self.nvda_ready = False

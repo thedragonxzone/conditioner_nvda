@@ -16,7 +16,7 @@ Chcę przenieść aplikację na nowe źródła danych i zmienić instrumenty na 
 
 4. Logika i GUI (JSON):
    - Wszelkie hardkodowane napisy "SOLUSDT" / "BTCUSDT" w kodzie (np. przy ustawianiu document.title w QWebEngineView) zmień odpowiednio na "NVDAUSDT" i "NASDAQUSDT".
-   - Aplikacja ma dalej w ten sam sposób parsować plik schemat_json_rezim.json, z tą różnicą, że w kodzie Pythona wyszukiwanie danych w słowniku "assets" powinno teraz odwoływać się do kluczy "NVDA" (zamiast "SOL") oraz "NASDAQ" (zamiast "BTC").
+   - Aplikacja ma dalej w ten sam sposób parsować plik dane_json_nvda.json, z tą różnicą, że w kodzie Pythona wyszukiwanie danych w słowniku "assets" powinno teraz odwoływać się do kluczy "NVDA" (zamiast "SOL") oraz "NASDAQ" (zamiast "BTC").
    - Zwróć uwagę na formatowanie ceny (priceFormat) dla obu wykresów, aby prawidłowo pokazywały miejsca po przecinku dla cen rzędu 205.00 (NVDA) i odpowiednio wyższych dla indeksu NASDAQ.
 
 Pokaż mi nowe wersje funkcji odpowiedzialnych za ładowanie danych historycznych (`load_historical_data`) dla obu źródeł oraz zaktualizowany mechanizm odbierania danych live dla Bitget i Yahoo Finance.

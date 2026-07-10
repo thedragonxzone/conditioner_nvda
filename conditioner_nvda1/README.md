@@ -38,7 +38,7 @@ sudo dnf install libnotify  # Fedora
 
 2. Run the application:
 ```bash
-python main.py
+python main_nvda.py
 ```
 
 ## Configuration File Format
