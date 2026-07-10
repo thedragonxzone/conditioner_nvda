@@ -1,0 +1,102 @@
+{
+  "metadata": {
+    "timestamp": "2026-07-09T17:51:00Z",
+    "primary_ticker": "NVDA",
+    "macro_ticker": "NQ=F"
+  },
+  "macro_environment": {
+    "fear_and_greed_index": 45,
+    "market_sentiment": "neutral"
+  },
+  "assets": {
+    "NASDAQ": {
+      "current_price": 18150.50,
+      "sentiment": "bullish-trend",
+      "key_gatekeeper_level": 18000.0,
+      "price_ranges": [
+        {
+          "id": "nasdaq_range_01",
+          "name": "NASDAQ Pivot & Support",
+          "support_zone": [17950.0, 18000.0],
+          "resistance_zone": [18250.0, 18300.0],
+          "timeframe": "1h",
+          "color": "#f38ba8",
+          "description": "NASDAQ handluje na poziomie 18,150 pkt, utrzymując się powyżej psychologicznego wsparcia 18K. Utrzymanie tego poziomu jest kluczowe dla sentymentu na spółkach technologicznych."
+        }
+      ],
+      "setups": []
+    },
+    "NVDA": {
+      "current_price": 132.50,
+      "price_ranges": [
+        {
+          "id": "range_intraday_01",
+          "name": "Immediate Compression Range",
+          "support_zone": [130.00, 130.50],
+          "resistance_zone": [133.50, 134.00],
+          "timeframe": "1h",
+          "color": "#89b4fa",
+          "description": "NVDA w fazie kompresji zmienności. Wsparcie popytowe na 130-130.50, opór na 133.50-134.00."
+        },
+        {
+          "id": "range_swing_02",
+          "name": "Core Chop Band",
+          "support_zone": [128.00, 129.00],
+          "resistance_zone": [135.00, 136.50],
+          "timeframe": "1h",
+          "color": "#a6e3a1",
+          "description": "Główny korytarz operacyjny 128-136.50. Silne skupywanie spadków w okolicach 128 USD."
+        }
+      ],
+      "setups": [
+        {
+          "id": "setup_nvda_long_01",
+          "name": "NVDA Demand Zone Long",
+          "bias": "LONG",
+          "conditions": {
+            "trigger_zone": [130.00, 130.50],
+            "trigger_condition": "price_holding_demand_area_with_nasdaq_above_18k",
+            "nasdaq_confirmation_price": 18000.0,
+            "nasdaq_confirmation_condition": "nasdaq_holding_18k_pivot"
+          },
+          "execution": {
+            "entry_zone": [130.00, 130.50],
+            "stop_loss_zone": [128.50, 128.50],
+            "take_profit_zones": [
+              [133.50, 134.00],
+              [135.00, 136.50]
+            ]
+          },
+          "commentary": "Taktyczna pozycja długa na NVDA przy wsparciu 130-130.50. Wymaga bezwzględnego utrzymania się indeksu NASDAQ powyżej 18,000 pkt. Stop Loss poniżej lokalnego dołka (128.50)."
+        },
+        {
+          "id": "setup_nvda_short_02",
+          "name": "NVDA Resistance Rejection Short",
+          "bias": "SHORT",
+          "conditions": {
+            "trigger_zone": [133.50, 134.00],
+            "trigger_condition": "price_spiking_into_supply_band_with_rejection",
+            "nasdaq_confirmation_price": 18000.0,
+            "nasdaq_confirmation_condition": "nasdaq_failing_to_hold_18k_pivot"
+          },
+          "execution": {
+            "entry_zone": [133.50, 134.00],
+            "stop_loss_zone": [135.50, 135.50],
+            "take_profit_zones": [
+              [130.50, 130.50],
+              [128.00, 129.00]
+            ]
+          },
+          "commentary": "Pozycja krótka (fading) na NVDA przy oporze 133.50-134.00. Setup rośnie na sile, jeśli NASDAQ zacznie słabnąć i tracić poziom 18K. Odrzucenie na H1 potwierdza wejście."
+        }
+      ],
+      "correlation_context": {
+        "divergence_warning": {
+          "is_active": false,
+          "type": "high_beta_follower_stretch",
+          "description": "NVDA zachowuje się jak aktywo o wysokiej becie względem NASDAQ. Zaleca się handel na wybiciach z konsolidacji przy potwierdzeniu kierunku przez indeks."
+        }
+      }
+    }
+  }
+}

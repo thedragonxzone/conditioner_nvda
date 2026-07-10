@@ -1,0 +1,5 @@
+lightweight-charts.js
+venv/
+node_modules/
+*.jpg
+*.png
