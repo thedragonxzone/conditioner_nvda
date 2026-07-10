@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Chart</title>
+    <script src="lightweight-charts.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background-color: #1e1e2e; color: #cdd6f4; font-family: sans-serif; overflow: hidden; }
+        #chart { position: absolute; top: 45px; bottom: 0; left: 0; right: 0; background-color: #1e1e2e; }
+        #controls { padding: 8px; display: flex; gap: 10px; align-items: center; background: #181825; border-bottom: 1px solid #313244; height: 28px; }
+        button { background: #313244; color: #cdd6f4; border: none; padding: 4px 12px; cursor: pointer; border-radius: 4px; font-size: 13px; }
+        button:hover { background: #45475a; }
+        button.active { background: #89b4fa; color: #1e1e2e; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <span style="font-weight: bold; font-size: 13px;">Interwał:</span>
+        <button onclick="switchInterval('1m')" id="btn_1m">1m</button>
+        <button onclick="switchInterval('5m')" id="btn_5m">5m</button>
+        <button onclick="switchInterval('15m')" id="btn_15m">15m</button>
+        <button onclick="switchInterval('1h')" id="btn_1h">1h</button>
+        <button onclick="switchInterval('1d')" id="btn_1d">1d</button>
+    </div>
+    <div id="chart"></div>
+
+    <script>
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            layout: {
+                background: { type: 'solid', color: '#1e1e2e' },
+                textColor: '#cdd6f4',
+            },
+            grid: {
+                vertLines: { color: '#313244' },
+                horzLines: { color: '#313244' }
+            },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            timeScale: { borderColor: '#313244', timeVisible: true, secondsVisible: false }
+        });
+
+        const candlestickSeries = chart.addCandlestickSeries({
+            upColor: '#a6e3a1', 
+            downColor: '#f38ba8', 
+            borderVisible: false, 
+            wickUpColor: '#a6e3a1', 
+            wickDownColor: '#f38ba8'
+        });
+
+        let isSyncing = false;
+
+        chart.timeScale().subscribeVisibleTimeRangeChange(range => {
+            if (isSyncing || !range) return;
+            if (window.pyWebViewHook) {
+                const message = { from: range.from, to: range.to };
+                console.log("VISIBLE_RANGE_CHANGED:" + JSON.stringify(message));
+            }
+        });
+
+        window.setVisibleRangeNoEvent = function(from, to) {
+            isSyncing = true;
+            chart.timeScale().setVisibleRange({ from: from, to: to });
+            setTimeout(() => { isSyncing = false; }, 50);
+        };
+
+        window.loadHistoricalData = function(jsonStr) {
+            try {
+                const data = JSON.parse(jsonStr);
+                console.log("[DEBUG_JS] Odebrano świece historyczne. Ilość: " + data.length);
+                
+                const formattedData = data.map(d => {
+                    let cleanTime = parseInt(d.time);
+                    if (cleanTime > 10000000000) {
+                        cleanTime = Math.floor(cleanTime / 1000);
+                    }
+                    return {
+                        time: Number(cleanTime), // Wymuszenie typu prymitywnego Number
+                        open: parseFloat(d.open), 
+                        high: parseFloat(d.high), 
+                        low: parseFloat(d.low), 
+                        close: parseFloat(d.close)
+                    };
+                });
+
+                candlestickSeries.setData(formattedData);
+                console.log("[DEBUG_JS] Wykonano setData(). Wykres powinien się wyrysować.");
+            } catch(e) {
+                console.error("[DEBUG_JS ERROR] Błąd parsowania historii:", e);
+            }
+        };
+
+        window.updateRealTimeBar = function(jsonStr) {
+            try {
+                const bar = JSON.parse(jsonStr);
+                let cleanTime = parseInt(bar.time);
+                if (cleanTime > 10000000000) {
+                    cleanTime = Math.floor(cleanTime / 1000);
+                }
+                const formattedBar = {
+                    time: Number(cleanTime), // Wymuszenie typu prymitywnego Number
+                    open: parseFloat(bar.open), 
+                    high: parseFloat(bar.high), 
+                    low: parseFloat(bar.low), 
+                    close: parseFloat(bar.close)
+                };
+                candlestickSeries.update(formattedBar);
+            } catch(e) {
+                console.error("[DEBUG_JS ERROR] Błąd w updateRealTimeBar:", e);
+            }
+        };
+
+        let rangeLines = [];
+        let setupLines = [];
+
+        window.showRangeLines = function(jsonStr) {
+            if (!candlestickSeries) return;
+            try {
+                const zones = JSON.parse(jsonStr);
+                zones.forEach(z => {
+                    const line = candlestickSeries.createPriceLine({
+                        price: (parseFloat(z.top) + parseFloat(z.bottom)) / 2, color: z.borderColor, lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: z.label
+                    });
+                    rangeLines.push(line);
+                });
+            } catch(e) {}
+        };
+
+        window.hideRangeLines = function() {
+            if (!candlestickSeries) return;
+            rangeLines.forEach(l => candlestickSeries.removePriceLine(l));
+            rangeLines = [];
+        };
+
+        window.showSetupLines = function(jsonStr) {
+            if (!candlestickSeries) return;
+            try {
+                const zones = JSON.parse(jsonStr);
+                zones.forEach(z => {
+                    const topVal = parseFloat(z.top);
+                    const bottomVal = parseFloat(z.bottom);
+                    const topLine = candlestickSeries.createPriceLine({
+                        price: topVal, color: z.borderColor, lineWidth: 2, 
+                        lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: z.label
+                    });
+                    if (Math.abs(topVal - bottomVal) > 0.001) {
+                        const bottomLine = candlestickSeries.createPriceLine({
+                            price: bottomVal, color: z.borderColor, lineWidth: 2, 
+                            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: z.label
+                        });
+                        setupLines.push(topLine, bottomLine);
+                    } else {
+                        setupLines.push(topLine);
+                    }
+                });
+            } catch(e) {}
+        };
+
+        window.hideSetupLines = function() {
+            if (!candlestickSeries) return;
+            setupLines.forEach(l => candlestickSeries.removePriceLine(l));
+            setupLines = [];
+        };
+
+        function switchInterval(interval) {
+            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById('btn_' + interval);
+            if (btn) btn.classList.add('active');
+            
+            if (window.pyWebViewHook) {
+                window.pyWebViewHook(interval);
+            }
+        }
+        document.getElementById('btn_1m').classList.add('active');
+    </script>
+</body>
+</html>

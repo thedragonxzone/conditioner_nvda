@@ -1,0 +1,8 @@
+PyQt6==6.7.0
+PyQt6-Qt6==6.7.0
+PyQt6-sip==13.6.0
+lightweight-charts==1.0.15
+watchdog==4.0.1
+websockets==12.0
+requests==2.32.3
+yfinance==0.2.39

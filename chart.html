@@ -2,175 +2,242 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Chart</title>
-    <script src="lightweight-charts.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVDA Chart</title>
+    <script src="lightweight-charts.standalone.production.js"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #1e1e2e; color: #cdd6f4; font-family: sans-serif; overflow: hidden; }
-        #chart { position: absolute; top: 45px; bottom: 0; left: 0; right: 0; background-color: #1e1e2e; }
-        #controls { padding: 8px; display: flex; gap: 10px; align-items: center; background: #181825; border-bottom: 1px solid #313244; height: 28px; }
-        button { background: #313244; color: #cdd6f4; border: none; padding: 4px 12px; cursor: pointer; border-radius: 4px; font-size: 13px; }
-        button:hover { background: #45475a; }
-        button.active { background: #89b4fa; color: #1e1e2e; font-weight: bold; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100%; height: 100%;
+            background-color: #11111b;
+            color: #a6adc8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            overflow: hidden;
+        }
+        #top-bar {
+            height: 32px;
+            background-color: #181825;
+            border-bottom: 1px solid #313244;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 4px;
+        }
+        #top-bar .label {
+            font-size: 12px;
+            color: #6c7086;
+            margin-right: 8px;
+        }
+        .interval-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #a6adc8;
+            font-size: 12px;
+            padding: 4px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.15s ease;
+        }
+        .interval-btn:hover {
+            background-color: #313244;
+            color: #cdd6f4;
+        }
+        .interval-btn.active {
+            background-color: #89b4fa;
+            color: #11111b;
+            font-weight: 600;
+        }
+        #chart-container {
+            position: absolute;
+            top: 32px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
     </style>
 </head>
 <body>
-    <div id="controls">
-        <span style="font-weight: bold; font-size: 13px;">Interwał:</span>
-        <button onclick="switchInterval('1m')" id="btn_1m">1m</button>
-        <button onclick="switchInterval('5m')" id="btn_5m">5m</button>
-        <button onclick="switchInterval('15m')" id="btn_15m">15m</button>
-        <button onclick="switchInterval('1h')" id="btn_1h">1h</button>
-        <button onclick="switchInterval('1d')" id="btn_1d">1d</button>
+    <div id="top-bar">
+        <span class="label">Interwał:</span>
+        <button class="interval-btn active" data-interval="1m">1m</button>
+        <button class="interval-btn" data-interval="5m">5m</button>
+        <button class="interval-btn" data-interval="15m">15m</button>
+        <button class="interval-btn" data-interval="1h">1h</button>
+        <button class="interval-btn" data-interval="1d">1d</button>
     </div>
-    <div id="chart"></div>
+    <div id="chart-container"></div>
 
     <script>
-        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+        // === Inicjalizacja wykresu ===
+        const chartContainer = document.getElementById('chart-container');
+        const chart = LightweightCharts.createChart(chartContainer, {
+            width: chartContainer.clientWidth,
+            height: chartContainer.clientHeight,
             layout: {
-                background: { type: 'solid', color: '#1e1e2e' },
-                textColor: '#cdd6f4',
+                background: { type: 'solid', color: '#11111b' },
+                textColor: '#a6adc8',
+                fontSize: 11,
             },
             grid: {
-                vertLines: { color: '#313244' },
-                horzLines: { color: '#313244' }
+                vertLines: { color: 'rgba(49, 50, 68, 0.4)' },
+                horzLines: { color: 'rgba(49, 50, 68, 0.4)' },
             },
-            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-            timeScale: { borderColor: '#313244', timeVisible: true, secondsVisible: false }
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+                vertLine: { color: '#6c7086', width: 1, style: 2 },
+                horzLine: { color: '#6c7086', width: 1, style: 2 },
+            },
+            rightPriceScale: {
+                borderColor: '#313244',
+                scaleMargins: { top: 0.1, bottom: 0.15 },
+            },
+            
+            
+            localization: {
+                timeFormatter: (timestamp) => {
+                    const date = new Date(timestamp * 1000);
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                },
+            },
+            timeScale: {
+                borderColor: '#313244',
+                timeVisible: true,
+                secondsVisible: false,
+                rightOffset: 5,
+                barSpacing: 8,
+                localTime: true,
+            },
         });
 
-        const candlestickSeries = chart.addCandlestickSeries({
-            upColor: '#a6e3a1', 
-            downColor: '#f38ba8', 
-            borderVisible: false, 
-            wickUpColor: '#a6e3a1', 
-            wickDownColor: '#f38ba8'
+        const candleSeries = chart.addCandlestickSeries({
+            upColor: '#a6e3a1',
+            downColor: '#f38ba8',
+            borderUpColor: '#a6e3a1',
+            borderDownColor: '#f38ba8',
+            wickUpColor: '#a6e3a1',
+            wickDownColor: '#f38ba8',
         });
 
-        let isSyncing = false;
-
-        chart.timeScale().subscribeVisibleTimeRangeChange(range => {
-            if (isSyncing || !range) return;
-            if (window.pyWebViewHook) {
-                const message = { from: range.from, to: range.to };
-                console.log("VISIBLE_RANGE_CHANGED:" + JSON.stringify(message));
+        // Responsywność
+        const resizeObserver = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                chart.applyOptions({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height,
+                });
             }
         });
+        resizeObserver.observe(chartContainer);
 
-        window.setVisibleRangeNoEvent = function(from, to) {
-            isSyncing = true;
-            chart.timeScale().setVisibleRange({ from: from, to: to });
-            setTimeout(() => { isSyncing = false; }, 50);
-        };
+        // === Przełącznik interwałów ===
+        const intervalButtons = document.querySelectorAll('.interval-btn');
+        intervalButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                intervalButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const newInterval = btn.dataset.interval;
+                console.log('INTERVAL_SWITCH:' + newInterval);
+            });
+        });
 
+        // === ŁADOWANIE DANYCH HISTORYCZNYCH ===
         window.loadHistoricalData = function(jsonStr) {
             try {
                 const data = JSON.parse(jsonStr);
-                console.log("[DEBUG_JS] Odebrano świece historyczne. Ilość: " + data.length);
-                
-                const formattedData = data.map(d => {
-                    let cleanTime = parseInt(d.time);
-                    if (cleanTime > 10000000000) {
-                        cleanTime = Math.floor(cleanTime / 1000);
-                    }
-                    return {
-                        time: Number(cleanTime), // Wymuszenie typu prymitywnego Number
-                        open: parseFloat(d.open), 
-                        high: parseFloat(d.high), 
-                        low: parseFloat(d.low), 
-                        close: parseFloat(d.close)
-                    };
-                });
-
-                candlestickSeries.setData(formattedData);
-                console.log("[DEBUG_JS] Wykonano setData(). Wykres powinien się wyrysować.");
-            } catch(e) {
-                console.error("[DEBUG_JS ERROR] Błąd parsowania historii:", e);
+                if (Array.isArray(data) && data.length > 0) {
+                    candleSeries.setData(data);
+                    chart.timeScale().fitContent();
+                }
+            } catch (e) {
+                console.log("DEBUG_JS: loadHistoricalData error: " + e);
             }
         };
 
+        // === AKTUALIZACJA REAL-TIME ===
         window.updateRealTimeBar = function(jsonStr) {
             try {
                 const bar = JSON.parse(jsonStr);
-                let cleanTime = parseInt(bar.time);
-                if (cleanTime > 10000000000) {
-                    cleanTime = Math.floor(cleanTime / 1000);
+                if (bar && bar.time !== undefined) {
+                    candleSeries.update(bar);
                 }
-                const formattedBar = {
-                    time: Number(cleanTime), // Wymuszenie typu prymitywnego Number
-                    open: parseFloat(bar.open), 
-                    high: parseFloat(bar.high), 
-                    low: parseFloat(bar.low), 
-                    close: parseFloat(bar.close)
-                };
-                candlestickSeries.update(formattedBar);
-            } catch(e) {
-                console.error("[DEBUG_JS ERROR] Błąd w updateRealTimeBar:", e);
+            } catch (e) {
+                console.log("DEBUG_JS: updateRealTimeBar error: " + e);
             }
         };
 
-        let rangeLines = [];
-        let setupLines = [];
-
+        // === RYSOWANIE STREF (RANGES) ===
+        let currentRangeLines = [];
         window.showRangeLines = function(jsonStr) {
-            if (!candlestickSeries) return;
             try {
                 const zones = JSON.parse(jsonStr);
-                zones.forEach(z => {
-                    const line = candlestickSeries.createPriceLine({
-                        price: (parseFloat(z.top) + parseFloat(z.bottom)) / 2, color: z.borderColor, lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: z.label
+                if (!Array.isArray(zones)) return;
+                zones.forEach(zone => {
+                    const topLine = candleSeries.createPriceLine({
+                        price: zone.top,
+                        color: zone.borderColor,
+                        lineWidth: 2,
+                        lineStyle: LightweightCharts.LineStyle.Solid,
+                        axisLabelVisible: true,
+                        title: zone.label || '',
                     });
-                    rangeLines.push(line);
+                    const bottomLine = candleSeries.createPriceLine({
+                        price: zone.bottom,
+                        color: zone.borderColor,
+                        lineWidth: 2,
+                        lineStyle: LightweightCharts.LineStyle.Dashed,
+                        axisLabelVisible: true,
+                        title: '',
+                    });
+                    currentRangeLines.push(topLine, bottomLine);
                 });
-            } catch(e) {}
+            } catch (e) {
+                console.log("DEBUG_JS: showRangeLines error: " + e);
+            }
         };
 
         window.hideRangeLines = function() {
-            if (!candlestickSeries) return;
-            rangeLines.forEach(l => candlestickSeries.removePriceLine(l));
-            rangeLines = [];
+            currentRangeLines.forEach(line => {
+                try { candleSeries.removePriceLine(line); } catch (e) {}
+            });
+            currentRangeLines = [];
         };
 
+        // === RYSOWANIE SETUPÓW ===
+        let currentSetupLines = [];
         window.showSetupLines = function(jsonStr) {
-            if (!candlestickSeries) return;
             try {
-                const zones = JSON.parse(jsonStr);
-                zones.forEach(z => {
-                    const topVal = parseFloat(z.top);
-                    const bottomVal = parseFloat(z.bottom);
-                    const topLine = candlestickSeries.createPriceLine({
-                        price: topVal, color: z.borderColor, lineWidth: 2, 
-                        lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: z.label
+                const lines = JSON.parse(jsonStr);
+                if (!Array.isArray(lines)) return;
+                lines.forEach(line => {
+                    const topLine = candleSeries.createPriceLine({
+                        price: line.top,
+                        color: line.borderColor,
+                        lineWidth: 2,
+                        lineStyle: LightweightCharts.LineStyle.Solid,
+                        axisLabelVisible: true,
+                        title: line.label || '',
                     });
-                    if (Math.abs(topVal - bottomVal) > 0.001) {
-                        const bottomLine = candlestickSeries.createPriceLine({
-                            price: bottomVal, color: z.borderColor, lineWidth: 2, 
-                            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: z.label
-                        });
-                        setupLines.push(topLine, bottomLine);
-                    } else {
-                        setupLines.push(topLine);
-                    }
+                    const bottomLine = candleSeries.createPriceLine({
+                        price: line.bottom,
+                        color: line.borderColor,
+                        lineWidth: 2,
+                        lineStyle: LightweightCharts.LineStyle.Dashed,
+                        axisLabelVisible: true,
+                        title: '',
+                    });
+                    currentSetupLines.push(topLine, bottomLine);
                 });
-            } catch(e) {}
+            } catch (e) {
+                console.log("DEBUG_JS: showSetupLines error: " + e);
+            }
         };
 
         window.hideSetupLines = function() {
-            if (!candlestickSeries) return;
-            setupLines.forEach(l => candlestickSeries.removePriceLine(l));
-            setupLines = [];
+            currentSetupLines.forEach(line => {
+                try { candleSeries.removePriceLine(line); } catch (e) {}
+            });
+            currentSetupLines = [];
         };
-
-        function switchInterval(interval) {
-            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-            const btn = document.getElementById('btn_' + interval);
-            if (btn) btn.classList.add('active');
-            
-            if (window.pyWebViewHook) {
-                window.pyWebViewHook(interval);
-            }
-        }
-        document.getElementById('btn_1m').classList.add('active');
     </script>
 </body>
 </html>
