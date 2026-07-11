@@ -31,7 +31,6 @@ BITGET_INTERVAL_MAP = {
     "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1H", "1d": "1D"
 }
 
-
 class BitgetFuturesClient(QThread):
     historical_data_ready = pyqtSignal(str, str, str)
     realtime_update_ready = pyqtSignal(str, str, str)
@@ -52,8 +51,7 @@ class BitgetFuturesClient(QThread):
             "limit": limit
         }
         if end_time:
-            params["endTime"] = str(end_time)  # API Bitget wymaga milisekund lub sekund w zależności od endpointu, v2 mix wymaga ms
-            
+            params["endTime"] = str(end_time)
         try:
             res = requests.get(self.base_url, params=params, timeout=10)
             if res.status_code == 200:
@@ -72,47 +70,34 @@ class BitgetFuturesClient(QThread):
         
         all_candles = []
         last_end_time = None
-        target_cycles = 3  # 3 cykle * 1000 świec = ~3000 sztuk
+        target_cycles = 3
         
         print(f"[PYTHON] Rozpoczynam pobieranie ~3000 świec dla {symbol}...")
-        
         for cycle in range(target_cycles):
-            # Pobieramy paczkę 1000 świec
             candles = self.fetch_candles(symbol, bitget_granularity, limit=1000, end_time=last_end_time)
             if not candles:
                 break
-                
             all_candles.extend(candles)
             
-            # Znajdujemy najstarszą świecę z tej paczki, żeby w kolejnym kroku pobrać dane przed nią
-            # Bitget zwraca dane od najnowszych do najstarszych lub odwrotnie, sortujemy/sprawdzamy timestampy
             timestamps = [int(c[0]) for c in candles]
             if not timestamps:
                 break
-            
             oldest_ts = min(timestamps)
-            # Przesuwamy punkt końcowy dla następnego zapytania o 1 milisekundę wstecz
             last_end_time = oldest_ts - 1
             
-            # Jeśli API zwróciło mniej niż 1000, oznacza to, że dotarliśmy do końca historii
             if len(candles) < 1000:
                 break
-                
-            # Mały sleep, żeby nie dostać bana za rate-limit przy restarcie aplikacji
             time.sleep(0.1)
 
         if all_candles:
             parsed_history = []
-            seen_times = set() # Zabezpieczenie przed duplikatami na granicach paczek
-            
+            seen_times = set()
             for c in all_candles:
                 raw_ts = int(c[0])
                 clean_ts = int(raw_ts // 1000) if raw_ts > 10000000000 else int(raw_ts)
-                
                 if clean_ts in seen_times:
                     continue
                 seen_times.add(clean_ts)
-                
                 parsed_history.append({
                     "time": clean_ts,
                     "open": float(c[1]),
@@ -121,13 +106,10 @@ class BitgetFuturesClient(QThread):
                     "close": float(c[4]),
                     "volume": float(c[5])
                 })
-                
-            # Sortujemy chronologicznie, bo lightweight-charts wymaga rosnących timestampów
-            parsed_history.sort(key=lambda x: x["time"])
             
+            parsed_history.sort(key=lambda x: x["time"])
             self.monitored_assets[asset_id]["last_ts"] = parsed_history[-1]["time"]
             json_str = json.dumps(parsed_history)
-            
             print(f"[PYTHON] Pomyślnie załadowano {len(parsed_history)} świec do wykresu.")
             self.historical_data_ready.emit(asset_id, json_str, ticker_name)
 
@@ -145,7 +127,7 @@ class BitgetFuturesClient(QThread):
                     last_recorded = self.monitored_assets[asset_id].get("last_ts", 0)
                     if last_recorded > 10000000000:
                         last_recorded = last_recorded // 1000
-
+                        
                     if clean_ts >= last_recorded:
                         bar = {
                             "time": clean_ts,
@@ -161,7 +143,6 @@ class BitgetFuturesClient(QThread):
     def stop(self):
         self.running = False
 
-
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, callback):
         self.callback = callback
@@ -170,22 +151,20 @@ class FileChangeHandler(FileSystemEventHandler):
         if not event.is_directory and event.src_path.endswith('.json'):
             self.callback()
 
-
 class SchemaWatcher(QObject):
     file_changed = pyqtSignal()
 
-    def __init__(self, file_path: str):
+    def __init__(self, watch_dir: str):
         super().__init__()
-        self.file_path = file_path
         self.observer = Observer()
         self.handler = FileChangeHandler(self.file_changed.emit)
-        self.observer.schedule(self.handler, path=str(Path(file_path).parent), recursive=False)
+        # POPRAWKA: Używamy bezpośrednio watch_dir, bez schodzenia o katalog niżej (.parent)
+        self.observer.schedule(self.handler, path=watch_dir, recursive=False)
         self.observer.start()
 
     def stop(self):
         self.observer.stop()
         self.observer.join()
-
 
 class WebEnginePageCustom(QWebEnginePage):
     def __init__(self, parent, asset_id):
@@ -200,19 +179,27 @@ class WebEnginePageCustom(QWebEnginePage):
             new_interval = message.replace("INTERVAL_SWITCH:", "").strip()
             self.parent_win.handle_interval_change(self.asset_id, new_interval)
 
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("NVDA Conditioner")
         self.resize(1600, 950)
-        base_dir = Path(__file__).parent
-        self.schema_path = base_dir / "dane_json_nvda.json"
-        print(self.schema_path)
+
+        # POPRAWKA: Zawsze używamy katalogu, w którym leży skrypt
+        self.base_dir = Path(__file__).resolve().parent
+        self.schema_path = self.base_dir / "dane_json_nvda.json"
+        print(f"[INFO] Ścieżka do JSON: {self.schema_path}")
+
         self.current_setup = None
         self.nvda_interval = "1m"
         self.nvda_ready = False
         self.schema_data = None
+
+        # Timer do debounce'u zmian pliku (zapobiega wielokrotnym resetom przy szybkim zapisie)
+        self.reload_timer = QTimer()
+        self.reload_timer.setSingleShot(True)
+        self.reload_timer.timeout.connect(self.reset_and_load_schema)
+
         self.init_ui()
 
         self.bitget_client = BitgetFuturesClient()
@@ -220,14 +207,12 @@ class MainWindow(QMainWindow):
         self.bitget_client.realtime_update_ready.connect(self.on_realtime_update)
         self.bitget_client.start()
 
-        #ustawianie ikony
-        sciezka_skryptu = Path(__file__).resolve().parent
-        sciezka_ikony = sciezka_skryptu / "nvidia_icon.svg"
+        # Ustawianie ikony
+        sciezka_ikony = self.base_dir / "nvidia_icon.svg"
         self.setWindowIcon(QIcon(str(sciezka_ikony)))
 
-        self.file_watcher = SchemaWatcher(str(base_dir))
-        print(base_dir)
-        print(self.file_watcher)
+        # Watchdog
+        self.file_watcher = SchemaWatcher(str(self.base_dir))
         self.file_watcher.file_changed.connect(self.on_file_changed)
 
     def init_ui(self):
@@ -283,15 +268,15 @@ class MainWindow(QMainWindow):
         nvda_lay = QVBoxLayout(self.nvda_container)
         nvda_lay.setContentsMargins(0, 0, 0, 0)
         nvda_lay.setSpacing(0)
-        
+
         self.nvda_label = QLabel("NVDAUSDT (Bitget Futures) - Interwał: 1m")
         self.nvda_label.setStyleSheet("background-color: #11111b; color: #a6adc8; padding: 6px; font-weight: bold;")
         self.nvda_label.setFixedHeight(28)
-        
+
         self.nvda_chart_view = QWebEngineView()
         self.nvda_page = WebEnginePageCustom(self, "NVDA")
         self.nvda_chart_view.setPage(self.nvda_page)
-        
+
         nvda_lay.addWidget(self.nvda_label)
         nvda_lay.addWidget(self.nvda_chart_view, stretch=1)
 
@@ -300,13 +285,13 @@ class MainWindow(QMainWindow):
         nasdaq_lay = QVBoxLayout(self.nasdaq_container)
         nasdaq_lay.setContentsMargins(0, 0, 0, 0)
         nasdaq_lay.setSpacing(0)
-        
+
         self.nasdaq_label = QLabel("NASDAQ-100 (TradingView CFD) - Podgląd rynku")
         self.nasdaq_label.setStyleSheet("background-color: #11111b; color: #a6adc8; padding: 6px; font-weight: bold;")
         self.nasdaq_label.setFixedHeight(28)
-        
+
         self.nasdaq_chart_view = QWebEngineView()
-        
+
         nasdaq_lay.addWidget(self.nasdaq_label)
         nasdaq_lay.addWidget(self.nasdaq_chart_view, stretch=1)
 
@@ -320,8 +305,9 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(chart_splitter, stretch=1)
 
         # Ładowanie wykresów
-        nvda_html_path = os.path.abspath("chart.html")
-        self.nvda_chart_view.setUrl(QUrl.fromLocalFile(nvda_html_path))
+        # POPRAWKA: Zawsze szukamy chart.html w katalogu skryptu
+        nvda_html_path = self.base_dir / "chart.html"
+        self.nvda_chart_view.setUrl(QUrl.fromLocalFile(str(nvda_html_path)))
         self.nvda_chart_view.loadFinished.connect(self.on_nvda_chart_load_finished)
 
         nasdaq_tv_url = self.generate_tradingview_url()
@@ -329,14 +315,12 @@ class MainWindow(QMainWindow):
 
     def generate_tradingview_url(self) -> str:
         base_url = "https://s.tradingview.com/widgetembed/"
-        
         disabled_features = [
             "show_right_widgets_panel_by_default", "right_toolbar", "widget_logo",
             "symbol_info_price_source",
             "symbol_info_long_description", "symbol_info_fundamentals",
             "show_symbol_info_panel", "symbol_info_dialog"
         ]
-        
         query_params = {
             "hideideas": "1",
             "backgroundColor": "#000000",
@@ -350,7 +334,6 @@ class MainWindow(QMainWindow):
             "disabled_features": json.dumps(disabled_features),
             "locale": "pl"
         }
-        
         settings = {
             "symbol": "IG:NASDAQ",
             "frameElementId": "tv_chart_nasdaq",
@@ -365,7 +348,6 @@ class MainWindow(QMainWindow):
             "timezone": "Europe/Warsaw",
             "backgroundColor": "#000000"
         }
-        
         encoded_params = urllib.parse.urlencode(query_params)
         encoded_settings = urllib.parse.quote(json.dumps(settings))
         return f"{base_url}?{encoded_params}#{encoded_settings}"
@@ -377,7 +359,6 @@ class MainWindow(QMainWindow):
             self.bitget_client.load_historical("NVDA", new_interval, "NVDA")
 
     def on_historical_data(self, asset_id: str, data_json: str, ticker_name: str):
-        """Bezpieczne wstrzyknięcie gotowego stringa JSON przy użyciu backticków"""
         if asset_id == "NVDA" and self.nvda_ready:
             js_code = f"""
             if (typeof window.loadHistoricalData === 'function') {{
@@ -389,7 +370,6 @@ class MainWindow(QMainWindow):
             self.nvda_chart_view.page().runJavaScript(js_code)
 
     def on_realtime_update(self, asset_id: str, bar_json: str, ticker_name: str):
-        """Bezpieczne wstrzyknięcie gotowej świecy real-time przy użyciu backticków"""
         if asset_id == "NVDA" and self.nvda_ready:
             js_code = f"""
             if (typeof window.updateRealTimeBar === 'function') {{
@@ -400,15 +380,49 @@ class MainWindow(QMainWindow):
             """
             self.nvda_chart_view.page().runJavaScript(js_code)
 
+    def reset_and_load_schema(self):
+        """Metoda wywoływana przez watchdoga - czyści wszystko do zera przed załadowaniem nowego pliku."""
+        print("[WATCHDOG] Wykryto zmianę pliku JSON. Resetowanie stanu do zera...")
+        
+        # 1. Reset zmiennych wewnętrznych
+        self.current_setup = None
+        self.schema_data = None
+
+        # 2. Czyszczenie interfejsu (UI)
+        self.macro_label.setText("Sentyment: N/A | F&G: N/A")
+        self.market_context_box.clear()
+        self.details_box.clear()
+
+        # 3. Czyszczenie wykresu (JS) - usuwamy stare linie
+        if self.nvda_ready:
+            self.nvda_chart_view.page().runJavaScript("if(window.hideRangeLines){window.hideRangeLines();}")
+            self.nvda_chart_view.page().runJavaScript("if(window.hideSetupLines){window.hideSetupLines();}")
+
+        # 4. Reset list (czyścimy, aby load_schema dodał elementy z domyślnie zaznaczonymi "ptaszkami")
+        self.ranges_list.blockSignals(True)
+        self.ranges_list.clear()
+        self.ranges_list.blockSignals(False)
+
+        self.setups_list.blockSignals(True)
+        self.setups_list.clear()
+        self.setups_list.blockSignals(False)
+
+        # 5. Załadowanie nowego schematu
+        self.load_schema()
+
     def load_schema(self):
-        if not os.path.exists(self.schema_path):
-            print("Nie odlaleziono dżejsona, ty chuju")
+        # POPRAWKA: Jawny komunikat, jeśli pliku nie ma, zamiast cichego return
+        if not self.schema_path.exists():
+            print(f"⚠️ [BŁĄD] Nie znaleziono pliku JSON pod ścieżką: {self.schema_path}")
             return
+            
         try:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self.schema_data = json.load(f)
+            
             env = self.schema_data.get("macro_environment", {})
             self.macro_label.setText(f"Sentyment: {env.get('market_sentiment','N/A').upper()} | F&G: {env.get('fear_and_greed_index','N/A')}")
+            
             self.update_market_context()
             self.update_ranges_list()
             self.update_setups_list()
@@ -416,7 +430,8 @@ class MainWindow(QMainWindow):
             print(f"Error loading schema: {e}")
 
     def on_file_changed(self):
-        QTimer.singleShot(500, self.load_schema)
+        # Używamy timera z singleShot, aby uniknąć nakładania się resetów przy szybkim zapisie pliku
+        self.reload_timer.start(500)
 
     def update_market_context(self):
         nasdaq_data = self.schema_data.get("assets", {}).get("NASDAQ", {})
@@ -427,64 +442,76 @@ class MainWindow(QMainWindow):
 
         text = f"Aktualna cena: {nasdaq_data.get('current_price', 'N/A')}\n"
         text += f"Sentiment: {nasdaq_data.get('sentiment', 'N/A')}\n"
-        text += f"Key Gatekeeper: {nasdaq_data.get('key_gatekeeper_level', 'N/A')}\n\n"
-
+        text += f"Key Gatekeeper: {nasdaq_data.get('key_gatekeeper_level', 'N/A')}\n"
+        
         ranges = nasdaq_data.get("price_ranges", [])
         if ranges:
             r = ranges[0]
             text += f"📌 {r['name']}\n"
             text += f"Support: {r['support_zone']}\n"
             text += f"Resistance: {r['resistance_zone']}\n"
-        
+            
         self.market_context_box.setPlainText(text)
         self.market_context_box.moveCursor(QTextCursor.MoveOperation.Start)
 
     def update_ranges_list(self):
         self.ranges_list.blockSignals(True)
+        
+        # Próba zachowania stanu zaznaczenia, jeśli lista nie była pusta (np. przy zmianie interwału)
+        # Ale po resecie watchdoga lista jest pusta, więc checked_ids będzie puste -> wszystko się zaznaczy
         checked_ids = [
             self.ranges_list.item(i).data(Qt.ItemDataRole.UserRole)["id"]
             for i in range(self.ranges_list.count())
             if self.ranges_list.item(i).checkState() == Qt.CheckState.Checked
         ]
+        
         self.ranges_list.clear()
-
         nvda_ranges = self.schema_data.get("assets", {}).get("NVDA", {}).get("price_ranges", [])
+        
         for r in nvda_ranges:
             item = QListWidgetItem(r['name'])
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            
+            # Jeśli nie ma starych ID (po resecie), domyślnie zaznaczamy wszystko
             if not checked_ids or r["id"] in checked_ids:
                 item.setCheckState(Qt.CheckState.Checked)
             else:
                 item.setCheckState(Qt.CheckState.Unchecked)
+                
             item.setData(Qt.ItemDataRole.UserRole, r)
             self.ranges_list.addItem(item)
-
+            
         self.ranges_list.blockSignals(False)
         self.redraw_ranges()
 
     def update_setups_list(self):
         self.setups_list.blockSignals(True)
+        
         checked_ids = [
             self.setups_list.item(i).data(Qt.ItemDataRole.UserRole)["id"]
             for i in range(self.setups_list.count())
             if self.setups_list.item(i).checkState() == Qt.CheckState.Checked
         ]
         current_row = self.setups_list.currentRow()
+        
         self.setups_list.clear()
-
         setups = self.schema_data.get("assets", {}).get("NVDA", {}).get("setups", [])
+        
         for s in setups:
             item = QListWidgetItem(f"{s['name']} ({s['bias']})")
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            
             if not checked_ids or s["id"] in checked_ids:
                 item.setCheckState(Qt.CheckState.Checked)
             else:
                 item.setCheckState(Qt.CheckState.Unchecked)
+                
             item.setData(Qt.ItemDataRole.UserRole, s)
             self.setups_list.addItem(item)
-
+            
         if 0 <= current_row < self.setups_list.count():
             self.setups_list.setCurrentRow(current_row)
+            
         self.setups_list.blockSignals(False)
         self.redraw_setups()
 
@@ -500,10 +527,11 @@ class MainWindow(QMainWindow):
         self.display_setup_details(setup)
 
     def redraw_ranges(self):
-        """Bezpieczne przekazanie stref za pomocą jednego zrzutu do JSON"""
         if not self.nvda_ready:
             return
+            
         self.nvda_chart_view.page().runJavaScript("if(window.hideRangeLines){window.hideRangeLines();}")
+        
         for i in range(self.ranges_list.count()):
             item = self.ranges_list.item(i)
             if item.checkState() == Qt.CheckState.Checked:
@@ -531,10 +559,11 @@ class MainWindow(QMainWindow):
                 self.nvda_chart_view.page().runJavaScript(js_command)
 
     def redraw_setups(self):
-        """Bezpieczne przekazanie linii setupów za pomocą jednego zrzutu do JSON"""
         if not self.nvda_ready:
             return
+            
         self.nvda_chart_view.page().runJavaScript("if(window.hideSetupLines){window.hideSetupLines();}")
+        
         for i in range(self.setups_list.count()):
             item = self.setups_list.item(i)
             if item.checkState() == Qt.CheckState.Checked:
@@ -559,6 +588,7 @@ class MainWindow(QMainWindow):
                         "borderColor": "#a6e3a1",
                         "label": f"TP{idx+1}"
                     })
+                
                 json_str = json.dumps(lines)
                 js_command = f"""
                 if(window.showSetupLines){{
@@ -572,15 +602,16 @@ class MainWindow(QMainWindow):
         text = f"=== STRATEGIA: {s['name']} ===\n"
         text += f"Kierunek (Bias): {s['bias']}\n"
         text += f"NVDA Trigger Zone: {cond.get('trigger_zone')}\n"
-        text += f"Trigger: {cond.get('trigger_condition')}\n\n"
+        text += f"Trigger: {cond.get('trigger_condition')}\n"
         text += f"📊 Warunek konfirmacji NASDAQ:\n"
         text += f"  Cena: {cond.get('nasdaq_confirmation_price')}\n"
-        text += f"  Warunek: {cond.get('nasdaq_confirmation_condition')}\n\n"
+        text += f"  Warunek: {cond.get('nasdaq_confirmation_condition')}\n"
         text += f"Wytyczne wykonania pozycji:\n"
         text += f" - Entry: {s['execution']['entry_zone']}\n"
         text += f" - Stop Loss: {s['execution']['stop_loss_zone']}\n"
-        text += f" - Targety TP: {s['execution']['take_profit_zones']}\n\n"
+        text += f" - Targety TP: {s['execution']['take_profit_zones']}\n"
         text += f"Komentarz teoretyczny:\n{s.get('commentary','')}\n"
+        
         self.details_box.setPlainText(text)
         self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
 
@@ -594,7 +625,6 @@ class MainWindow(QMainWindow):
         self.bitget_client.stop()
         self.file_watcher.stop()
         event.accept()
-
 
 if __name__ == "__main__":
     os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
