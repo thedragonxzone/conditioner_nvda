@@ -35,7 +35,7 @@
           "support_zone": [204.30, 206.00],
           "resistance_zone": [209.50, 211.50],
           "timeframe": "1h",
-          "color": "#89b4fa",
+          "color": "#89dceb",
           "description": "Obszar bezpośredniej konsolidacji. NVDA zamknęła sesję na poziomie 209.03 USD (wzrost o 3.41%), zatrzymując się tuż pod kluczowym oporem pivotowym 209.50-211.50. Krótkoterminowe momentum poprawiło się szybciej niż ogólny sentyment rynkowy (Fear & Greed na poziomie 23), co sugeruje, że odbicie ma charakter techniczny i jest podatne na gwałtowne cofnięcia w głąb strefy neutralnej (204.30-209.50), jeśli popyt nie zdoła trwale zaabsorbować nawisu podaży."
         },
         {
@@ -44,7 +44,7 @@
           "support_zone": [199.50, 201.00],
           "resistance_zone": [214.50, 217.90],
           "timeframe": "1h",
-          "color": "#a6e3a1",
+          "color": "#b4befe",
           "description": "Kluczowe strefy strukturalne wyższego rzędu. Dolne ograniczenie (199.50-201.00) stanowi krytyczny basen płynności i poziom popytowy, gdzie kupujący wykazują silną skłonność do obrony (higher lows). Górne ograniczenie (214.50-217.90) to strefa potężnej podaży, wynikająca z wcześniejszych maksimów lokalnych i nieudanych prób wyciągania wykresu po korekcie. Trwałe wyjście powyżej 217.90 otwiera przestrzeń do ekspansji w kierunku 222.80-224.90."
         }
       ],

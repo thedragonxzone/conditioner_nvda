@@ -337,7 +337,7 @@ class MainWindow(QMainWindow):
         settings = {
             "symbol": "IG:NASDAQ",
             "frameElementId": "tv_chart_nasdaq",
-            "interval": "5",
+            "interval": "1",
             "hide_legend": "0",
             "hide_side_toolbar": "0",
             "allow_symbol_change": "0",
@@ -572,7 +572,7 @@ class MainWindow(QMainWindow):
                 lines.append({
                     "top": s["execution"]["entry_zone"][1],
                     "bottom": s["execution"]["entry_zone"][0],
-                    "borderColor": "#89b4fa",
+                    "borderColor": "#f9e2af",
                     "label": f"ENTRY ({s['id']})"
                 })
                 lines.append({
