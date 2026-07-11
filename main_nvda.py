@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("NVDA Conditioner")
         self.resize(1600, 950)
-        base_dir = Path(__file__).resolve().parent
+        base_dir = Path(__file__).parent
         self.schema_path = base_dir / "dane_json_nvda.json"
         print(self.schema_path)
         self.current_setup = None
@@ -402,6 +402,7 @@ class MainWindow(QMainWindow):
 
     def load_schema(self):
         if not os.path.exists(self.schema_path):
+            print("Nie odlaleziono dżejsona, ty chuju")
             return
         try:
             with open(self.schema_path, "r", encoding="utf-8") as f:
