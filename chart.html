@@ -68,7 +68,6 @@
     <div id="chart-container"></div>
 
     <script>
-        // === Inicjalizacja wykresu ===
         const chartContainer = document.getElementById('chart-container');
         const chart = LightweightCharts.createChart(chartContainer, {
             width: chartContainer.clientWidth,
@@ -91,12 +90,11 @@
                 borderColor: '#313244',
                 scaleMargins: { top: 0.1, bottom: 0.15 },
             },
-            
-            
             localization: {
+                // Wymuszenie formatu 24h na etykiecie krzyżyka (crosshair)
                 timeFormatter: (timestamp) => {
                     const date = new Date(timestamp * 1000);
-                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    return date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
                 },
             },
             timeScale: {
@@ -105,7 +103,22 @@
                 secondsVisible: false,
                 rightOffset: 5,
                 barSpacing: 8,
-                localTime: true,
+                // Wymuszenie formatu 24h na dolnej osi X
+                tickMarkFormatter: (time, tickMarkType, locale) => {
+                    const date = new Date(time * 1000);
+                    switch (tickMarkType) {
+                        case 0: // Year
+                            return date.getFullYear();
+                        case 1: // Month
+                            return date.toLocaleDateString('pl-PL', { month: 'short' });
+                        case 2: // DayOfMonth
+                            return date.getDate();
+                        case 3: // Time
+                            return date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false });
+                        case 4: // TimeWithSeconds
+                            return date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                    }
+                },
             },
         });
 
@@ -118,7 +131,6 @@
             wickDownColor: '#f38ba8',
         });
 
-        // Responsywność
         const resizeObserver = new ResizeObserver(entries => {
             for (const entry of entries) {
                 chart.applyOptions({
@@ -129,7 +141,6 @@
         });
         resizeObserver.observe(chartContainer);
 
-        // === Przełącznik interwałów ===
         const intervalButtons = document.querySelectorAll('.interval-btn');
         intervalButtons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -140,7 +151,6 @@
             });
         });
 
-        // === ŁADOWANIE DANYCH HISTORYCZNYCH ===
         window.loadHistoricalData = function(jsonStr) {
             try {
                 const data = JSON.parse(jsonStr);
@@ -153,7 +163,6 @@
             }
         };
 
-        // === AKTUALIZACJA REAL-TIME ===
         window.updateRealTimeBar = function(jsonStr) {
             try {
                 const bar = JSON.parse(jsonStr);
@@ -165,7 +174,6 @@
             }
         };
 
-        // === RYSOWANIE STREF (RANGES) ===
         let currentRangeLines = [];
         window.showRangeLines = function(jsonStr) {
             try {
@@ -202,7 +210,6 @@
             currentRangeLines = [];
         };
 
-        // === RYSOWANIE SETUPÓW ===
         let currentSetupLines = [];
         window.showSetupLines = function(jsonStr) {
             try {

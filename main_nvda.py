@@ -23,7 +23,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
-from PyQt6.QtGui import QFont, QTextCursor
+from PyQt6.QtGui import QFont, QTextCursor, QIcon
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -44,13 +44,16 @@ class BitgetFuturesClient(QThread):
         }
         self.base_url = "https://api.bitget.com/api/v2/mix/market/candles"
 
-    def fetch_candles(self, symbol: str, granularity: str, limit: int = 1000) -> List[list]:
+    def fetch_candles(self, symbol: str, granularity: str, limit: int = 1000, end_time: int = None) -> List[list]:
         params = {
             "symbol": symbol,
             "productType": "usdt-futures",
             "granularity": granularity,
             "limit": limit
         }
+        if end_time:
+            params["endTime"] = str(end_time)  # API Bitget wymaga milisekund lub sekund w zależności od endpointu, v2 mix wymaga ms
+            
         try:
             res = requests.get(self.base_url, params=params, timeout=10)
             if res.status_code == 200:
@@ -66,12 +69,49 @@ class BitgetFuturesClient(QThread):
         bitget_granularity = BITGET_INTERVAL_MAP.get(ui_interval, "1m")
         self.monitored_assets[asset_id]["interval"] = ui_interval
         symbol = self.monitored_assets[asset_id]["ticker"]
-        candles = self.fetch_candles(symbol, bitget_granularity, limit=500)
-        if candles:
+        
+        all_candles = []
+        last_end_time = None
+        target_cycles = 3  # 3 cykle * 1000 świec = ~3000 sztuk
+        
+        print(f"[PYTHON] Rozpoczynam pobieranie ~3000 świec dla {symbol}...")
+        
+        for cycle in range(target_cycles):
+            # Pobieramy paczkę 1000 świec
+            candles = self.fetch_candles(symbol, bitget_granularity, limit=1000, end_time=last_end_time)
+            if not candles:
+                break
+                
+            all_candles.extend(candles)
+            
+            # Znajdujemy najstarszą świecę z tej paczki, żeby w kolejnym kroku pobrać dane przed nią
+            # Bitget zwraca dane od najnowszych do najstarszych lub odwrotnie, sortujemy/sprawdzamy timestampy
+            timestamps = [int(c[0]) for c in candles]
+            if not timestamps:
+                break
+            
+            oldest_ts = min(timestamps)
+            # Przesuwamy punkt końcowy dla następnego zapytania o 1 milisekundę wstecz
+            last_end_time = oldest_ts - 1
+            
+            # Jeśli API zwróciło mniej niż 1000, oznacza to, że dotarliśmy do końca historii
+            if len(candles) < 1000:
+                break
+                
+            # Mały sleep, żeby nie dostać bana za rate-limit przy restarcie aplikacji
+            time.sleep(0.1)
+
+        if all_candles:
             parsed_history = []
-            for c in candles:
+            seen_times = set() # Zabezpieczenie przed duplikatami na granicach paczek
+            
+            for c in all_candles:
                 raw_ts = int(c[0])
                 clean_ts = int(raw_ts // 1000) if raw_ts > 10000000000 else int(raw_ts)
+                
+                if clean_ts in seen_times:
+                    continue
+                seen_times.add(clean_ts)
                 
                 parsed_history.append({
                     "time": clean_ts,
@@ -81,9 +121,14 @@ class BitgetFuturesClient(QThread):
                     "close": float(c[4]),
                     "volume": float(c[5])
                 })
+                
+            # Sortujemy chronologicznie, bo lightweight-charts wymaga rosnących timestampów
             parsed_history.sort(key=lambda x: x["time"])
+            
             self.monitored_assets[asset_id]["last_ts"] = parsed_history[-1]["time"]
             json_str = json.dumps(parsed_history)
+            
+            print(f"[PYTHON] Pomyślnie załadowano {len(parsed_history)} świec do wykresu.")
             self.historical_data_ready.emit(asset_id, json_str, ticker_name)
 
     def run(self):
@@ -159,9 +204,11 @@ class WebEnginePageCustom(QWebEnginePage):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NVDA + NASDAQ Trading Assistant")
+        self.setWindowTitle("NVDA Conditioner")
         self.resize(1600, 950)
-        self.schema_path = "dane_json_nvda.json"
+        base_dir = Path(__file__).resolve().parent
+        self.schema_path = base_dir / "dane_json_nvda.json"
+        print(self.schema_path)
         self.current_setup = None
         self.nvda_interval = "1m"
         self.nvda_ready = False
@@ -173,7 +220,14 @@ class MainWindow(QMainWindow):
         self.bitget_client.realtime_update_ready.connect(self.on_realtime_update)
         self.bitget_client.start()
 
-        self.file_watcher = SchemaWatcher(self.schema_path)
+        #ustawianie ikony
+        sciezka_skryptu = Path(__file__).resolve().parent
+        sciezka_ikony = sciezka_skryptu / "nvidia_icon.svg"
+        self.setWindowIcon(QIcon(str(sciezka_ikony)))
+
+        self.file_watcher = SchemaWatcher(str(base_dir))
+        print(base_dir)
+        print(self.file_watcher)
         self.file_watcher.file_changed.connect(self.on_file_changed)
 
     def init_ui(self):
@@ -278,7 +332,7 @@ class MainWindow(QMainWindow):
         
         disabled_features = [
             "show_right_widgets_panel_by_default", "right_toolbar", "widget_logo",
-            "use_localstorage_for_settings", "symbol_info_price_source",
+            "symbol_info_price_source",
             "symbol_info_long_description", "symbol_info_fundamentals",
             "show_symbol_info_panel", "symbol_info_dialog"
         ]
