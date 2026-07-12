@@ -183,18 +183,18 @@
                     const topLine = candleSeries.createPriceLine({
                         price: zone.top,
                         color: zone.borderColor,
-                        lineWidth: 2,
+                        lineWidth: 1,
                         lineStyle: LightweightCharts.LineStyle.Solid,
                         axisLabelVisible: true,
-                        title: zone.label || '',
+                        title: zone.label + " MAX",
                     });
                     const bottomLine = candleSeries.createPriceLine({
                         price: zone.bottom,
                         color: zone.borderColor,
-                        lineWidth: 2,
-                        lineStyle: LightweightCharts.LineStyle.Dashed,
+                        lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Solid,
                         axisLabelVisible: true,
-                        title: '',
+                        title: zone.label + " MIN",
                     });
                     currentRangeLines.push(topLine, bottomLine);
                 });
@@ -219,7 +219,7 @@
                     const topLine = candleSeries.createPriceLine({
                         price: line.top,
                         color: line.borderColor,
-                        lineWidth: 2,
+                        lineWidth: 1,
                         lineStyle: LightweightCharts.LineStyle.Solid,
                         axisLabelVisible: true,
                         title: line.label || '',
@@ -227,8 +227,8 @@
                     const bottomLine = candleSeries.createPriceLine({
                         price: line.bottom,
                         color: line.borderColor,
-                        lineWidth: 2,
-                        lineStyle: LightweightCharts.LineStyle.Dashed,
+                        lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Solid,
                         axisLabelVisible: true,
                         title: '',
                     });

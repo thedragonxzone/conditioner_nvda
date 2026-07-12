@@ -575,13 +575,13 @@ class MainWindow(QMainWindow):
                             "top": r["resistance_zone"][1],
                             "bottom": r["resistance_zone"][0],
                             "borderColor": r.get("color", "#f38ba8"),
-                            "label": f"RES: {r['name']}"
+                            "label": f"OPÓR: {r['name']}"
                         },
                         {
                             "top": r["support_zone"][1],
                             "bottom": r["support_zone"][0],
                             "borderColor": r.get("color", "#a6e3a1"),
-                            "label": f"SUP: {r['name']}"
+                            "label": f"WSPARCIE: {r['name']}"
                         }
                     ]
                     json_str = json.dumps(zone_info)
