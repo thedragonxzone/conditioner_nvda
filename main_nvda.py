@@ -2,7 +2,7 @@
 """
 NVDA (Bitget) + NASDAQ (TradingView widget) Trading Assistant
 - Panel boczny PO LEWEJ, wykresy PO PRAWEJ
-- NVDA: lightweight-charts z danymi z Bitget + strefy/setupy z JSON
+- NVDA: lightweight-charts z danymi z Bitget (WebSocket dla RT, REST dla historii)
 - NASDAQ: widget TradingView ładowany bezpośrednio przez HTTPS
 """
 import json
@@ -10,7 +10,7 @@ import os
 import sys
 import time
 import requests
-import urllib.parse
+import websocket  # <-- NOWA ZALEŻNOŚĆ: pip install websocket-client
 from pathlib import Path
 from typing import Dict, List
 from PyQt6.QtWidgets import (
@@ -27,23 +27,56 @@ from PyQt6.QtGui import QFont, QTextCursor, QIcon
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+
+# Mapowanie interwałów UI na nazwy kanałów WebSocket Bitget V2
+# Uwaga: Bitget V2 używa wielkich liter dla godzin/dni (1H, 1D)
+WEBSOCKET_CHANNEL_MAP = {
+    "1m": "candle1m",
+    "5m": "candle5m",
+    "15m": "candle15m",
+    "1h": "candle1H",
+    "1d": "candle1D"
+}
+
+# Mapowanie do REST API (granulacja historii) - bez zmian
 BITGET_INTERVAL_MAP = {
     "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1H", "1d": "1D"
 }
 
+
 class BitgetFuturesClient(QThread):
+    """
+    Klient Bitget działający w osobnym wątku.
+    - REST API: tylko do jednorazowego pobrania historii (~3000 świec)
+    - WebSocket: do strumieniowania aktualizacji w czasie rzeczywistym (push)
+    """
     historical_data_ready = pyqtSignal(str, str, str)
     realtime_update_ready = pyqtSignal(str, str, str)
+    # Sygnał wewnętrzny - pozwala wywołać ładowanie historii w sposób thread-safe
+    load_history_requested = pyqtSignal(str, str, str)
 
     def __init__(self):
         super().__init__()
         self.running = True
         self.monitored_assets = {
-            "NVDA": {"ticker": "NVDAUSDT", "interval": "1m", "last_ts": 0}
+            "NVDA": {
+                "ticker": "NVDAUSDT",
+                "interval": "1m",
+                "last_ts": 0,
+                "subscribed_channel": None  # aktualnie zasubskrybowany kanał WS
+            }
         }
         self.base_url = "https://api.bitget.com/api/v2/mix/market/candles"
+        self.ws_url = "wss://ws.bitget.com/v2/ws/public"
+        self.ws = None
+
+        # Połącz sygnał wewnętrzny z metodą load_historical (thread-safe)
+        self.load_history_requested.connect(self.load_historical)
+
+    # ============ REST API - tylko do historii ============
 
     def fetch_candles(self, symbol: str, granularity: str, limit: int = 1000, end_time: int = None) -> List[list]:
+        """Pobiera świece historyczne przez REST (używane tylko na starcie / zmianę interwału)."""
         params = {
             "symbol": symbol,
             "productType": "usdt-futures",
@@ -64,32 +97,33 @@ class BitgetFuturesClient(QThread):
         return []
 
     def load_historical(self, asset_id: str, ui_interval: str, ticker_name: str):
+        """
+        Ładuje ~3000 świec historycznych przez REST.
+        UWAGA: Ta metoda jest teraz wywoływana w wątku BitgetFuturesClient
+        (dzięki sygnałowi load_history_requested), więc nie blokuje GUI.
+        """
         bitget_granularity = BITGET_INTERVAL_MAP.get(ui_interval, "1m")
         self.monitored_assets[asset_id]["interval"] = ui_interval
         symbol = self.monitored_assets[asset_id]["ticker"]
-        
         all_candles = []
         last_end_time = None
         target_cycles = 3
-        
         print(f"[PYTHON] Rozpoczynam pobieranie ~3000 świec dla {symbol}...")
+
         for cycle in range(target_cycles):
             candles = self.fetch_candles(symbol, bitget_granularity, limit=1000, end_time=last_end_time)
             if not candles:
                 break
             all_candles.extend(candles)
-            
             timestamps = [int(c[0]) for c in candles]
             if not timestamps:
                 break
-                
             oldest_ts = min(timestamps)
             last_end_time = oldest_ts - 1
-            
             if len(candles) < 1000:
                 break
             time.sleep(0.1)
-            
+
         if all_candles:
             parsed_history = []
             seen_times = set()
@@ -107,42 +141,214 @@ class BitgetFuturesClient(QThread):
                     "close": float(c[4]),
                     "volume": float(c[5])
                 })
-            
             parsed_history.sort(key=lambda x: x["time"])
             self.monitored_assets[asset_id]["last_ts"] = parsed_history[-1]["time"]
             json_str = json.dumps(parsed_history)
             print(f"[PYTHON] Pomyślnie załadowano {len(parsed_history)} świec do wykresu.")
             self.historical_data_ready.emit(asset_id, json_str, ticker_name)
 
-    def run(self):
+            # Po załadowaniu historii - zasubskrybuj odpowiedni kanał WebSocket
+            self._subscribe_asset(asset_id)
+
+    # ============ WebSocket - czas rzeczywisty ============
+
+    def _subscribe_asset(self, asset_id: str):
+        """Wysyła subskrypcję WebSocket dla danego aktywa."""
+        info = self.monitored_assets[asset_id]
+        channel = WEBSOCKET_CHANNEL_MAP.get(info["interval"], "candle1m")
+        # Jeśli już jesteśmy zasubskrybowani na inny kanał - najpierw odsubskrybuj
+        if info["subscribed_channel"] and info["subscribed_channel"] != channel:
+            self._send_unsubscribe(info["ticker"], info["subscribed_channel"])
+        self._send_subscribe(info["ticker"], channel)
+        info["subscribed_channel"] = channel
+        print(f"[WS] Subskrypcja: {info['ticker']} -> {channel}")
+
+    def _send_subscribe(self, symbol: str, channel: str):
+        """Wysyła wiadomość subskrypcji przez aktywne połączenie WebSocket."""
+        if not self.ws:
+            return
+        msg = {
+            "op": "subscribe",
+            "args": [
+                {
+                    "instType": "USDT-FUTURES",
+                    "channel": channel,
+                    "instId": symbol
+                }
+            ]
+        }
+        try:
+            self.ws.send(json.dumps(msg))
+        except Exception as e:
+            print(f"[WS ERROR] Błąd wysyłania subscribe: {e}")
+
+    def _send_unsubscribe(self, symbol: str, channel: str):
+        """Wysyła wiadomość odsubskrybowania."""
+        if not self.ws:
+            return
+        msg = {
+            "op": "unsubscribe",
+            "args": [
+                {
+                    "instType": "USDT-FUTURES",
+                    "channel": channel,
+                    "instId": symbol
+                }
+            ]
+        }
+        try:
+            self.ws.send(json.dumps(msg))
+        except Exception as e:
+            print(f"[WS ERROR] Błąd wysyłania unsubscribe: {e}")
+
+    def change_interval(self, asset_id: str, new_interval: str):
+        """
+        Zmienia interwał dla aktywa - odsubskrybowuje stary kanał i subskrybuje nowy.
+        Metoda thread-safe - można wywołać z dowolnego wątku.
+        """
+        if asset_id in self.monitored_assets:
+            self.monitored_assets[asset_id]["interval"] = new_interval
+            self._subscribe_asset(asset_id)
+
+    def _on_ws_open(self, ws):
+        """Callback wywoływany po otwarciu połączenia WebSocket."""
+        print("[WS] Połączenie WebSocket otwarte")
+        # Zasubskrybuj wszystkie monitorowane aktywa
+        for asset_id in self.monitored_assets:
+            self._subscribe_asset(asset_id)
+
+    def _on_ws_message(self, ws, message):
+        """
+        Callback wywoływany przy każdej wiadomości z WebSocket.
+        Bitget V2 wysyła:
+        - "ping" (tekst) - trzeba odpowiedzieć "pong"
+        - JSON z potwierdzeniem subskrypcji (event: "subscribe")
+        - JSON z danymi świec (action: "update")
+        """
+        # Heartbeat - Bitget wymaga odpowiedzi "pong" na "ping"
+        if message == "ping":
+            ws.send("pong")
+            return
+
+        try:
+            data = json.loads(message)
+        except Exception:
+            return
+
+        # Ignorujemy komunikaty potwierdzenia subskrypcji / błędy
+        if "event" in data:
+            event = data.get("event")
+            if event == "subscribe":
+                print(f"[WS] Potwierdzono subskrypcję: {data.get('arg')}")
+            elif event == "error":
+                print(f"[WS ERROR] {data.get('code')}: {data.get('msg')}")
+            return
+
+        # Przetwarzamy dane aktualizacji świec
+        if data.get("action") == "update" and "data" in data:
+            arg = data.get("arg", {})
+            channel = arg.get("channel", "")
+            inst_id = arg.get("instId", "")
+
+            # Znajdź asset_id po tickerze
+            asset_id = None
+            for aid, info in self.monitored_assets.items():
+                if info["ticker"] == inst_id:
+                    asset_id = aid
+                    break
+            if not asset_id:
+                return
+
+            # Bitget V2 candle data: tablica [ts, open, high, low, close, volume, quoteVolume]
+            # Może być pojedyncza tablica lub lista tablic
+            candles = data.get("data", [])
+            if not candles:
+                return
+
+            # Bierzemy pierwszą (najnowszą) świecę
+            c = candles[0] if isinstance(candles[0], list) else candles
+            if not isinstance(c, list) or len(c) < 6:
+                return
+
+            try:
+                raw_ts = int(c[0])
+                clean_ts = int(raw_ts // 1000) if raw_ts > 10000000000 else int(raw_ts)
+                last_recorded = self.monitored_assets[asset_id].get("last_ts", 0)
+
+                # Aktualizujemy tylko jeśli świeca jest nowsza lub równa ostatniej
+                # (równa = ta sama świeca, ale zaktualizowana cena)
+                if clean_ts >= last_recorded:
+                    bar = {
+                        "time": clean_ts,
+                        "open": float(c[1]),
+                        "high": float(c[2]),
+                        "low": float(c[3]),
+                        "close": float(c[4]),
+                        "volume": float(c[5])
+                    }
+                    self.monitored_assets[asset_id]["last_ts"] = clean_ts
+                    self.realtime_update_ready.emit(
+                        asset_id,
+                        json.dumps(bar),
+                        self.monitored_assets[asset_id]["ticker"]
+                    )
+            except Exception as e:
+                print(f"[WS PARSE ERROR] {e}, dane: {c}")
+
+    def _on_ws_error(self, ws, error):
+        """Callback błędów WebSocket."""
+        print(f"[WS ERROR] {error}")
+
+    def _on_ws_close(self, ws, close_status_code=None, close_msg=None):
+        """Callback zamknięcia połączenia - logujemy i próbujemy reconnect."""
+        print(f"[WS] Połączenie zamknięte (code={close_status_code}, msg={close_msg})")
+
+    def _connect_websocket(self):
+        """Tworzy i uruchamia połączenie WebSocket z automatycznym reconnectem."""
+        # enable_multithread=True pozwala na bezpieczne wysyłanie z innych wątków
+        self.ws = websocket.WebSocketApp(
+            self.ws_url,
+            on_open=self._on_ws_open,
+            on_message=self._on_ws_message,
+            on_error=self._on_ws_error,
+            on_close=self._on_ws_close
+        )
+        # run_forever z ping_interval automatycznie utrzymuje połączenie
+        # Ale Bitget wymaga ręcznej odpowiedzi "pong" na "ping" tekstowy - obsłużone w _on_ws_message
         while self.running:
-            time.sleep(2)
-            for asset_id, info in self.monitored_assets.items():
-                bitget_granularity = BITGET_INTERVAL_MAP.get(info["interval"], "1m")
-                candles = self.fetch_candles(info["ticker"], bitget_granularity, limit=2)
-                if candles:
-                    c = candles[0]
-                    raw_ts = int(c[0])
-                    clean_ts = int(raw_ts // 1000) if raw_ts > 10000000000 else int(raw_ts)
-                    
-                    last_recorded = self.monitored_assets[asset_id].get("last_ts", 0)
-                    if last_recorded > 10000000000:
-                        last_recorded = last_recorded // 1000
-                        
-                    if clean_ts >= last_recorded:
-                        bar = {
-                            "time": clean_ts,
-                            "open": float(c[1]),
-                            "high": float(c[2]),
-                            "low": float(c[3]),
-                            "close": float(c[4]),
-                            "volume": float(c[5])
-                        }
-                        self.monitored_assets[asset_id]["last_ts"] = clean_ts
-                        self.realtime_update_ready.emit(asset_id, json.dumps(bar), info["ticker"])
+            try:
+                print("[WS] Łączenie z Bitget WebSocket...")
+                self.ws.run_forever(ping_interval=0)  # ping_interval=0 bo Bitget używa tekstowego ping/pong
+            except Exception as e:
+                print(f"[WS] Wyjątek w run_forever: {e}")
+
+            if not self.running:
+                break
+
+            # Reconnect z backoff - czekamy 3 sekundy przed ponowną próbą
+            print("[WS] Próba ponownego połączenia za 3 sekundy...")
+            for _ in range(30):
+                if not self.running:
+                    return
+                time.sleep(0.1)
+
+    def run(self):
+        """Główna pętla wątku - teraz tylko obsługuje WebSocket."""
+        print("[PYTHON] Uruchamianie klienta Bitget (WebSocket mode)...")
+        self._connect_websocket()
+        print("[PYTHON] Klient Bitget zakończony.")
 
     def stop(self):
+        """Zatrzymuje wątek i zamyka połączenie WebSocket."""
         self.running = False
+        if self.ws:
+            try:
+                self.ws.close()
+            except Exception:
+                pass
+
+
+# ============ Reszta kodu - bez zmian w logice ============
 
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, callback):
@@ -151,6 +357,7 @@ class FileChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if not event.is_directory and event.src_path.endswith('.json'):
             self.callback()
+
 
 class SchemaWatcher(QObject):
     file_changed = pyqtSignal()
@@ -166,6 +373,7 @@ class SchemaWatcher(QObject):
         self.observer.stop()
         self.observer.join()
 
+
 class WebEnginePageCustom(QWebEnginePage):
     def __init__(self, parent, asset_id):
         super().__init__(parent)
@@ -179,25 +387,22 @@ class WebEnginePageCustom(QWebEnginePage):
             new_interval = message.replace("INTERVAL_SWITCH:", "").strip()
             self.parent_win.handle_interval_change(self.asset_id, new_interval)
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("NVDA Conditioner")
         self.resize(1600, 950)
-
         self.base_dir = Path(__file__).resolve().parent
         self.schema_path = self.base_dir / "dane_json_nvda.json"
         print(f"[INFO] Ścieżka do JSON: {self.schema_path}")
-
         self.current_setup = None
         self.nvda_interval = "1m"
         self.nvda_ready = False
         self.schema_data = None
-
         self.reload_timer = QTimer()
         self.reload_timer.setSingleShot(True)
         self.reload_timer.timeout.connect(self.reset_and_load_schema)
-
         self.init_ui()
 
         self.bitget_client = BitgetFuturesClient()
@@ -217,7 +422,6 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(main_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
 
-        # === GŁÓWNY SPLITTER POZIOMY (Lewy panel vs Wykresy) ===
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_splitter.setStyleSheet("QSplitter::handle { background-color: #313244; }")
 
@@ -239,15 +443,12 @@ class MainWindow(QMainWindow):
         self.market_context_box.setStyleSheet("background-color: #181825; color: #a6adc8; border: 1px solid #313244; border-radius: 4px; font-size: 11px;")
         left_layout.addWidget(self.market_context_box)
 
-        # === WEWNĘTRZNY SPLITTER PIONOWY (Listy vs Opis) ===
         left_inner_splitter = QSplitter(Qt.Orientation.Vertical)
         left_inner_splitter.setStyleSheet("QSplitter::handle { background-color: #313244; }")
 
-        # Górna część: Listy
         lists_widget = QWidget()
         lists_layout = QVBoxLayout(lists_widget)
         lists_layout.setContentsMargins(0, 0, 0, 0)
-
         lists_layout.addWidget(QLabel("Aktywne Poziomy i Analizy:", styleSheet="color: #bac2de; font-weight: bold;"))
         self.ranges_list = QListWidget()
         self.ranges_list.setStyleSheet("background-color: #181825; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px;")
@@ -262,11 +463,9 @@ class MainWindow(QMainWindow):
         self.setups_list.itemClicked.connect(self.on_setup_selected)
         lists_layout.addWidget(self.setups_list)
 
-        # Dolna część: Opis
         details_widget = QWidget()
         details_layout = QVBoxLayout(details_widget)
         details_layout.setContentsMargins(0, 0, 0, 0)
-
         details_layout.addWidget(QLabel("Komentarz i Wytyczne Strategii:", styleSheet="color: #bac2de; font-weight: bold;"))
         self.details_box = QTextEdit()
         self.details_box.setReadOnly(True)
@@ -276,42 +475,33 @@ class MainWindow(QMainWindow):
         left_inner_splitter.addWidget(lists_widget)
         left_inner_splitter.addWidget(details_widget)
         left_inner_splitter.setSizes([400, 300])
-
         left_layout.addWidget(left_inner_splitter, stretch=1)
 
         # === PRAWA STRONA: WYKRESY ===
         chart_splitter = QSplitter(Qt.Orientation.Vertical)
         chart_splitter.setStyleSheet("background-color: #11111b; QSplitter::handle { background-color: #313244; }")
 
-        # NVDA
         self.nvda_container = QWidget()
         nvda_lay = QVBoxLayout(self.nvda_container)
         nvda_lay.setContentsMargins(0, 0, 0, 0)
         nvda_lay.setSpacing(0)
-        
         self.nvda_label = QLabel("NVDAUSDT (Bitget Futures) - Interwał: 1m")
         self.nvda_label.setStyleSheet("background-color: #11111b; color: #a6adc8; padding: 6px; font-weight: bold;")
         self.nvda_label.setFixedHeight(28)
-        
         self.nvda_chart_view = QWebEngineView()
         self.nvda_page = WebEnginePageCustom(self, "NVDA")
         self.nvda_chart_view.setPage(self.nvda_page)
-        
         nvda_lay.addWidget(self.nvda_label)
         nvda_lay.addWidget(self.nvda_chart_view, stretch=1)
 
-        # NASDAQ
         self.nasdaq_container = QWidget()
         nasdaq_lay = QVBoxLayout(self.nasdaq_container)
         nasdaq_lay.setContentsMargins(0, 0, 0, 0)
         nasdaq_lay.setSpacing(0)
-        
         self.nasdaq_label = QLabel("NASDAQ-100 (TradingView CFD) - Podgląd rynku")
         self.nasdaq_label.setStyleSheet("background-color: #11111b; color: #a6adc8; padding: 6px; font-weight: bold;")
         self.nasdaq_label.setFixedHeight(28)
-        
         self.nasdaq_chart_view = QWebEngineView()
-        
         nasdaq_lay.addWidget(self.nasdaq_label)
         nasdaq_lay.addWidget(self.nasdaq_chart_view, stretch=1)
 
@@ -324,10 +514,8 @@ class MainWindow(QMainWindow):
         main_splitter.addWidget(left_panel)
         main_splitter.addWidget(chart_splitter)
         main_splitter.setSizes([420, 1180])
-
         main_layout.addWidget(main_splitter, stretch=1)
 
-        # Ładowanie wykresów
         nvda_html_path = self.base_dir / "chart.html"
         self.nvda_chart_view.setUrl(QUrl.fromLocalFile(str(nvda_html_path)))
         self.nvda_chart_view.loadFinished.connect(self.on_nvda_chart_load_finished)
@@ -358,83 +546,86 @@ class MainWindow(QMainWindow):
         studies_overrides = {}
         settings_json = json.dumps(settings)
         overrides_json = json.dumps(studies_overrides)
-
         return f"""
-        <!DOCTYPE html>
-        <html style="margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;">
-        <head>
-            <meta charset="utf-8">
-            <style>
-                html, body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; background-color: #000000; overflow: hidden; }}
-                #tv_chart_nasdaq {{ width: 100% !important; height: 100% !important; position: absolute; top: 0; left: 0; }}
-            </style>
-        </head>
-        <body>
-            <div id="tv_chart_nasdaq"></div>
-            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-            <script type="text/javascript">
-                try {{
-                    var config = {settings_json};
-                    config.studies_overrides = {overrides_json};
-                    config.container_id = "tv_chart_nasdaq";
-                    new TradingView.widget(config);
-                }} catch (e) {{
-                    console.error("Błąd inicjalizacji wykresu TradingView:", e);
-                }}
-            </script>
-        </body>
-        </html>
-        """
+<!DOCTYPE html>
+<html style="margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;">
+<head>
+<meta charset="utf-8">
+<style>
+html, body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; background-color: #000000; overflow: hidden; }}
+#tv_chart_nasdaq {{ width: 100% !important; height: 100% !important; position: absolute; top: 0; left: 0; }}
+</style>
+</head>
+<body>
+<div id="tv_chart_nasdaq"></div>
+<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+<script type="text/javascript">
+try {{
+var config = {settings_json};
+config.studies_overrides = {overrides_json};
+config.container_id = "tv_chart_nasdaq";
+new TradingView.widget(config);
+}} catch (e) {{
+console.error("Błąd inicjalizacji wykresu TradingView:", e);
+}}
+</script>
+</body>
+</html>
+"""
 
     def handle_interval_change(self, asset_id: str, new_interval: str):
+        """
+        Obsługa zmiany interwału z poziomu JS.
+        KLUCZOWA ZMIANA: zamiast wywoływać load_historical bezpośrednio (co blokowało GUI),
+        wysyłamy sygnał do wątku BitgetFuturesClient, który wykona to asynchronicznie.
+        Dodatkowo zmieniamy subskrypcję WebSocket na nowy kanał.
+        """
         if asset_id == "NVDA":
             self.nvda_interval = new_interval
             self.nvda_label.setText(f"NVDAUSDT (Bitget Futures) - Interwał: {new_interval}")
-            self.bitget_client.load_historical("NVDA", new_interval, "NVDA")
+            # Thread-safe wywołanie ładowania historii w wątku klienta
+            self.bitget_client.load_history_requested.emit(asset_id, new_interval, asset_id)
+            # Zmiana subskrypcji WebSocket na nowy kanał
+            self.bitget_client.change_interval(asset_id, new_interval)
 
     def on_historical_data(self, asset_id: str, data_json: str, ticker_name: str):
         if asset_id == "NVDA" and self.nvda_ready:
             js_code = f"""
-            if (typeof window.loadHistoricalData === 'function') {{
-                window.loadHistoricalData(`{data_json}`);
-            }} else {{
-                console.log('DEBUG_JS: loadHistoricalData jeszcze nie jest gotowe.');
-            }}
-            """
+if (typeof window.loadHistoricalData === 'function') {{
+window.loadHistoricalData(`{data_json}`);
+}} else {{
+console.log('DEBUG_JS: loadHistoricalData jeszcze nie jest gotowe.');
+}}
+"""
             self.nvda_chart_view.page().runJavaScript(js_code)
 
     def on_realtime_update(self, asset_id: str, bar_json: str, ticker_name: str):
         if asset_id == "NVDA" and self.nvda_ready:
             js_code = f"""
-            if (typeof window.updateRealTimeBar === 'function') {{
-                window.updateRealTimeBar(`{bar_json}`);
-            }} else {{
-                console.log('DEBUG_JS: updateRealTimeBar jeszcze nie jest gotowe.');
-            }}
-            """
+if (typeof window.updateRealTimeBar === 'function') {{
+window.updateRealTimeBar(`{bar_json}`);
+}} else {{
+console.log('DEBUG_JS: updateRealTimeBar jeszcze nie jest gotowe.');
+}}
+"""
             self.nvda_chart_view.page().runJavaScript(js_code)
 
     def reset_and_load_schema(self):
         print("[WATCHDOG] Wykryto zmianę pliku JSON. Resetowanie stanu do zera...")
         self.current_setup = None
         self.schema_data = None
-
         self.macro_label.setText("Sentyment: N/A | F&G: N/A")
         self.market_context_box.clear()
         self.details_box.clear()
-
         if self.nvda_ready:
             self.nvda_chart_view.page().runJavaScript("if(window.hideRangeLines){window.hideRangeLines();}")
             self.nvda_chart_view.page().runJavaScript("if(window.hideSetupLines){window.hideSetupLines();}")
-
         self.ranges_list.blockSignals(True)
         self.ranges_list.clear()
         self.ranges_list.blockSignals(False)
-
         self.setups_list.blockSignals(True)
         self.setups_list.clear()
         self.setups_list.blockSignals(False)
-
         self.load_schema()
 
     def load_schema(self):
@@ -444,10 +635,8 @@ class MainWindow(QMainWindow):
         try:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self.schema_data = json.load(f)
-
             env = self.schema_data.get("macro_environment", {})
             self.macro_label.setText(f"Sentyment: {env.get('market_sentiment','N/A').upper()} | F&G: {env.get('fear_and_greed_index','N/A')}")
-            
             self.update_market_context()
             self.update_ranges_list()
             self.update_setups_list()
@@ -463,14 +652,11 @@ class MainWindow(QMainWindow):
             self.market_context_box.setPlainText("Brak danych o NASDAQ w JSON.")
             self.market_context_box.moveCursor(QTextCursor.MoveOperation.Start)
             return
-
         text = f"Sentiment: {nasdaq_data.get('sentiment', 'N/A')}\n"
         text += f"Kluczowy poziom (Gatekeeper): {nasdaq_data.get('key_gatekeeper_level', 'N/A')}\n"
-        
         analyses = nasdaq_data.get("analyses", [])
         if analyses:
             text += f"\n📌 {analyses[0]['name']}:\n{analyses[0]['description'][:120]}...\n"
-            
         self.market_context_box.setPlainText(text)
         self.market_context_box.moveCursor(QTextCursor.MoveOperation.Start)
 
@@ -483,7 +669,6 @@ class MainWindow(QMainWindow):
         ]
         self.ranges_list.clear()
 
-        # Dodaj analizę NASDAQ jako pierwszy element
         nasdaq_data = self.schema_data.get("assets", {}).get("NASDAQ", {})
         nasdaq_analyses = nasdaq_data.get("analyses", [])
         if nasdaq_analyses:
@@ -494,7 +679,6 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, {"type": "nasdaq_analysis", "data": a})
                 self.ranges_list.addItem(item)
 
-        # Dodaj poziomy NVDA
         nvda_ranges = self.schema_data.get("assets", {}).get("NVDA", {}).get("price_ranges", [])
         for r in nvda_ranges:
             item = QListWidgetItem(r['name'])
@@ -505,7 +689,6 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Unchecked)
             item.setData(Qt.ItemDataRole.UserRole, {"type": "nvda_range", "data": r})
             self.ranges_list.addItem(item)
-
         self.ranges_list.blockSignals(False)
         self.redraw_ranges()
 
@@ -518,7 +701,6 @@ class MainWindow(QMainWindow):
         ]
         current_row = self.setups_list.currentRow()
         self.setups_list.clear()
-
         setups = self.schema_data.get("assets", {}).get("NVDA", {}).get("setups", [])
         for s in setups:
             item = QListWidgetItem(f"{s['name']} ({s['bias']})")
@@ -529,10 +711,8 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Unchecked)
             item.setData(Qt.ItemDataRole.UserRole, s)
             self.setups_list.addItem(item)
-
         if 0 <= current_row < self.setups_list.count():
             self.setups_list.setCurrentRow(current_row)
-
         self.setups_list.blockSignals(False)
         self.redraw_setups()
 
@@ -543,10 +723,8 @@ class MainWindow(QMainWindow):
         role_data = item.data(Qt.ItemDataRole.UserRole)
         if not role_data:
             return
-        
         item_type = role_data.get("type")
         data = role_data.get("data")
-        
         if item_type == "nasdaq_analysis":
             self.display_nasdaq_analysis_details(data)
         elif item_type == "nvda_range":
@@ -586,10 +764,10 @@ class MainWindow(QMainWindow):
                     ]
                     json_str = json.dumps(zone_info)
                     js_command = f"""
-                    if(window.showRangeLines){{
-                        window.showRangeLines(`{json_str}`);
-                    }}
-                    """
+if(window.showRangeLines){{
+window.showRangeLines(`{json_str}`);
+}}
+"""
                     self.nvda_chart_view.page().runJavaScript(js_command)
 
     def redraw_setups(self):
@@ -622,14 +800,14 @@ class MainWindow(QMainWindow):
                     })
                 json_str = json.dumps(lines)
                 js_command = f"""
-                if(window.showSetupLines){{
-                    window.showSetupLines(`{json_str}`);
-                }}
-                """
+if(window.showSetupLines){{
+window.showSetupLines(`{json_str}`);
+}}
+"""
                 self.nvda_chart_view.page().runJavaScript(js_command)
 
     def display_nasdaq_analysis_details(self, a: dict):
-        text = f"=== ANALIZA NASDAQ: {a['name']} ===\n\n"
+        text = f"=== ANALIZA NASDAQ: {a['name']} ===\n"
         text += f"{a.get('description', 'Brak opisu.')}\n"
         self.details_box.setPlainText(text)
         self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
@@ -638,7 +816,7 @@ class MainWindow(QMainWindow):
         text = f"=== POZIOM: {r['name']} ===\n"
         text += f"Ram czasowy (Timeframe): {r.get('timeframe', 'N/A')}\n"
         text += f"Strefa Wsparcia (Support): {r['support_zone']}\n"
-        text += f"Strefa Oporu (Resistance): {r['resistance_zone']}\n\n"
+        text += f"Strefa Oporu (Resistance): {r['resistance_zone']}\n"
         text += f"Opis i Kontekst:\n{r.get('description', 'Brak opisu.')}\n"
         self.details_box.setPlainText(text)
         self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
@@ -655,7 +833,7 @@ class MainWindow(QMainWindow):
         text += f"Wytyczne wykonania pozycji:\n"
         text += f" - Entry: {s['execution']['entry_zone']}\n"
         text += f" - Stop Loss: {s['execution']['stop_loss_zone']}\n"
-        text += f" - Targety TP: {s['execution']['take_profit_zones']}\n\n"
+        text += f" - Targety TP: {s['execution']['take_profit_zones']}\n"
         text += f"Komentarz teoretyczny:\n{s.get('commentary','')}\n"
         self.details_box.setPlainText(text)
         self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
@@ -663,13 +841,17 @@ class MainWindow(QMainWindow):
     def on_nvda_chart_load_finished(self, ok):
         if ok:
             self.nvda_ready = True
-            QTimer.singleShot(500, lambda: self.bitget_client.load_historical("NVDA", self.nvda_interval, "NVDA"))
+            # Thread-safe wywołanie przez sygnał
+            QTimer.singleShot(500, lambda: self.bitget_client.load_history_requested.emit(
+                "NVDA", self.nvda_interval, "NVDA"
+            ))
             self.load_schema()
 
     def closeEvent(self, event):
         self.bitget_client.stop()
         self.file_watcher.stop()
         event.accept()
+
 
 if __name__ == "__main__":
     os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
