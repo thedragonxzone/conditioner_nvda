@@ -10,28 +10,27 @@
   },
   "assets": {
     "NASDAQ": {
-      "current_price": 18150.50,
       "sentiment": "neutral-rebound",
       "key_gatekeeper_level": 18000.0,
-      "price_ranges": [
+      "analyses": [
         {
-          "id": "nasdaq_range_01",
-          "name": "NASDAQ Trend & Broad Breadth Filter",
-          "support_zone": [17950.0, 18000.0],
-          "resistance_zone": [18250.0, 18300.0],
-          "timeframe": "1h",
-          "color": "#f38ba8",
+          "id": "nasdaq_analysis_01",
+          "name": "Trend, Szerokość Rynku i Filtrowanie",
           "description": "NASDAQ wykazuje oznaki lokalnego wyczerpania i presji rotacji sektorowej, mimo że NVDA próbuje odbijać. Indeks pozostaje filtrem nadrzędnym: stabilizacja lub ruch w górę na NASDAQ aktywuje scenariusze breakoutowe na NVDA, podczas gdy jego osłabienie (rollover) natychmiast zaneguje wysiłki kupujących i sprowokuje mocniejsze cofnięcie na spółkach o wysokiej becie."
+        },
+        {
+          "id": "nasdaq_analysis_02",
+          "name": "Kontekst Makro i Płynność",
+          "description": "Wskaźnik Strachu i Chciwości (Fear & Greed) znajduje się na niskim poziomie 23, co wskazuje na dominację sentymentu negatywnego. W takim środowisku każde odbicie jest traktowane przez rynek jako okazja do sprzedaży, dopóki nie nastąpi wyraźne przełamanie kluczowych oporów i zmiana struktury rynkowej."
         }
-      ],
-      "setups": []
+      ]
     },
     "NVDA": {
       "current_price": 209.03,
       "price_ranges": [
         {
           "id": "range_intraday_01",
-          "name": "Immediate Pivot & Chop Zone",
+          "name": "Bezpośredni Pivot i Strefa Konsolidacji",
           "support_zone": [204.30, 206.00],
           "resistance_zone": [209.50, 211.50],
           "timeframe": "1h",
@@ -40,18 +39,18 @@
         },
         {
           "id": "range_swing_02",
-          "name": "Extended Liquidity Pools & Major Supply",
+          "name": "Zewnętrzne Pule Płynności i Główna Podaż",
           "support_zone": [199.50, 201.00],
           "resistance_zone": [214.50, 217.90],
           "timeframe": "1h",
           "color": "#b4befe",
-          "description": "Kluczowe strefy strukturalne wyższego rzędu. Dolne ograniczenie (199.50-201.00) stanowi krytyczny basen płynności i poziom popytowy, gdzie kupujący wykazują silną skłonność do obrony (higher lows). Górne ograniczenie (214.50-217.90) to strefa potężnej podaży, wynikająca z wcześniejszych maksimów lokalnych i nieudanych prób wyciągania wykresu po korekcie. Trwałe wyjście powyżej 217.90 otwiera przestrzeń do ekspansji w kierunku 222.80-224.90."
+          "description": "Kluczowe strefy strukturalne wyższego rzędu. Dolne ograniczenie (199.50-201.00) stanowi krytyczny basen płynności i poziom popytowy, gdzie kupujący wykazują silną skłonność do obrony (higher lows). Górne ograniczenie (214.5-217.90) to strefa potężnej podaży, wynikająca z wcześniejszych maksimów lokalnych i nieudanych prób wyciągania wykresu po korekcie. Trwałe wyjście powyżej 217.90 otwiera przestrzeń do ekspansji w kierunku 222.80-224.90."
         }
       ],
       "setups": [
         {
           "id": "setup_nvda_long_01",
-          "name": "NVDA Support Hold or Breakout Reclaim",
+          "name": "NVDA Obrona Wsparcia lub Powrót po Wybiciu",
           "bias": "LONG",
           "conditions": {
             "trigger_zone": [206.00, 209.50],
@@ -71,7 +70,7 @@
         },
         {
           "id": "setup_nvda_short_02",
-          "name": "NVDA Breakdown Confirmation or Resistance Fade",
+          "name": "NVDA Potwierdzenie Załamania lub Odrzucenie Oporu",
           "bias": "SHORT",
           "conditions": {
             "trigger_zone": [206.00, 217.90],
