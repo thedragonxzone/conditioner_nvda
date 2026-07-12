@@ -310,47 +310,86 @@ class MainWindow(QMainWindow):
         self.nvda_chart_view.setUrl(QUrl.fromLocalFile(str(nvda_html_path)))
         self.nvda_chart_view.loadFinished.connect(self.on_nvda_chart_load_finished)
 
-        nasdaq_tv_url = self.generate_tradingview_url()
-        self.nasdaq_chart_view.setUrl(QUrl(nasdaq_tv_url))
+        nasdaq_html_content = self.generate_tradingview_html()
+        self.nasdaq_chart_view.setHtml(nasdaq_html_content, QUrl("https://s3.tradingview.com"))
 
-    def generate_tradingview_url(self) -> str:
-        base_url = "https://s.tradingview.com/widgetembed/"
-        disabled_features = [
-            "show_right_widgets_panel_by_default", "right_toolbar", "widget_logo",
-            "symbol_info_price_source",
-            "symbol_info_long_description", "symbol_info_fundamentals",
-            "show_symbol_info_panel", "symbol_info_dialog"
-        ]
-        query_params = {
-            "hideideas": "1",
-            "backgroundColor": "#000000",
-            "overrides": json.dumps({
-                "paneProperties.background": "#000000",
-                "paneProperties.backgroundType": "solid",
-                "paneProperties.vertGridProperties.color": "rgba(42, 46, 57, 0.2)",
-                "paneProperties.horzGridProperties.color": "rgba(42, 46, 57, 0.2)"
-            }),
-            "enabled_features": "[]",
-            "disabled_features": json.dumps(disabled_features),
-            "locale": "pl"
-        }
+    def generate_tradingview_html(self) -> str:
+        # Główna konfiguracja widżetu
         settings = {
             "symbol": "IG:NASDAQ",
-            "frameElementId": "tv_chart_nasdaq",
             "interval": "1",
-            "hide_legend": "0",
-            "hide_side_toolbar": "0",
-            "allow_symbol_change": "0",
-            "save_image": "0",
-            "studies": "VWAP@tv-basicstudies",
             "theme": "dark",
             "style": "1",
             "timezone": "Europe/Warsaw",
-            "backgroundColor": "#000000"
+            "locale": "pl",
+            "toolbar_bg": "#000000",
+            "enable_publishing": False,
+            "hide_side_toolbar": False,
+            "allow_symbol_change": False,
+            "save_image": False,
+            "width": "100%",   # Wymuszenie szerokości bezpośrednio w widżecie
+            "height": "100%",  # Wymuszenie wysokości bezpośrednio w widżecie
+            "studies": [
+                "VWAP@tv-basicstudies",
+                "PivotPointsStandard@tv-basicstudies"
+            ]
         }
-        encoded_params = urllib.parse.urlencode(query_params)
-        encoded_settings = urllib.parse.quote(json.dumps(settings))
-        return f"{base_url}?{encoded_params}#{encoded_settings}"
+
+        # Uproszczone nadpisanie akceptowane przez darmowy widgetembed
+        studies_overrides = {
+            # W darmowym widżecie właściwości wskaźników często nadpisuje się globalnie przez klucz powiązany z ID
+            
+            #"pivot points standard.inputs.pivotsBack": 1, 
+            #"pivot points standard.inputs.type": "Traditional"
+            
+        }
+
+        settings_json = json.dumps(settings)
+        overrides_json = json.dumps(studies_overrides)
+
+        return f"""
+        <!DOCTYPE html>
+        <html style="margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;">
+        <head>
+            <meta charset="utf-8">
+            <style>
+                html, body {{
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    background-color: #000000;
+                    overflow: hidden;
+                }}
+                /* Wymuszamy, aby kontener wypełniał całe okno WebView */
+                #tv_chart_nasdaq {{
+                    width: 100% !important;
+                    height: 100% !important;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="tv_chart_nasdaq"></div>
+
+            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+            <script type="text/javascript">
+                try {{
+                    var config = {settings_json};
+                    
+                    config.studies_overrides = {overrides_json};
+                    config.container_id = "tv_chart_nasdaq";
+                    
+                    new TradingView.widget(config);
+                }} catch (e) {{
+                    console.error("Błąd inicjalizacji wykresu TradingView:", e);
+                }}
+            </script>
+        </body>
+        </html>
+        """
 
     def handle_interval_change(self, asset_id: str, new_interval: str):
         if asset_id == "NVDA":
