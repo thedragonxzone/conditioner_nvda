@@ -1,3 +1,5 @@
 1. sprawdzić czy da się zapisywać w localstorage zapisy na tv, szczególnie wskaźniki
 2. zmiany w json:
 w nasdaq usunąć range i current price bo bot nie ma dostępu do danych, jedynie co może zostać to opis obecnej sytuacji na nasdaq;
+3. dodać ogólną analizę do json
+4. spolszczyć jsona

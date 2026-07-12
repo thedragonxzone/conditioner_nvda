@@ -217,9 +217,12 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(main_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
 
+        # === GŁÓWNY SPLITTER POZIOMY (Lewy panel vs Wykresy) ===
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setStyleSheet("QSplitter::handle { background-color: #313244; }")
+
         # === LEWY PANEL ===
         left_panel = QFrame()
-        left_panel.setFixedWidth(420)
         left_panel.setStyleSheet("background-color: #1e1e2e; border-right: 1px solid #313244;")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(10, 10, 10, 10)
@@ -236,36 +239,49 @@ class MainWindow(QMainWindow):
         self.market_context_box.setStyleSheet("background-color: #181825; color: #a6adc8; border: 1px solid #313244; border-radius: 4px; font-size: 11px;")
         left_layout.addWidget(self.market_context_box)
 
-        left_layout.addWidget(QLabel("Aktywne Poziomy NVDA (Ranges):", styleSheet="color: #bac2de; font-weight: bold;"))
+        # === WEWNĘTRZNY SPLITTER PIONOWY (Listy vs Opis) ===
+        left_inner_splitter = QSplitter(Qt.Orientation.Vertical)
+        left_inner_splitter.setStyleSheet("QSplitter::handle { background-color: #313244; }")
+
+        # Górna część: Listy
+        lists_widget = QWidget()
+        lists_layout = QVBoxLayout(lists_widget)
+        lists_layout.setContentsMargins(0, 0, 0, 0)
+
+        lists_layout.addWidget(QLabel("Aktywne Poziomy i Analizy:", styleSheet="color: #bac2de; font-weight: bold;"))
         self.ranges_list = QListWidget()
         self.ranges_list.setStyleSheet("background-color: #181825; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px;")
         self.ranges_list.itemChanged.connect(self.on_range_visibility_changed)
-        self.ranges_list.itemClicked.connect(self.on_range_selected) # NOWE: Kliknięcie wyświetla opis
-        left_layout.addWidget(self.ranges_list)
+        self.ranges_list.itemClicked.connect(self.on_range_selected)
+        lists_layout.addWidget(self.ranges_list)
 
-        # NOWE: Lista Analiz NASDAQ
-        left_layout.addWidget(QLabel("Analizy i Kontekst NASDAQ:", styleSheet="color: #bac2de; font-weight: bold;"))
-        self.nasdaq_analyses_list = QListWidget()
-        self.nasdaq_analyses_list.setStyleSheet("background-color: #181825; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px;")
-        self.nasdaq_analyses_list.itemClicked.connect(self.on_nasdaq_analysis_selected)
-        left_layout.addWidget(self.nasdaq_analyses_list)
-
-        left_layout.addWidget(QLabel("Dostępne Strategie NVDA (Setups):", styleSheet="color: #bac2de; font-weight: bold;"))
+        lists_layout.addWidget(QLabel("Dostępne Strategie NVDA (Setups):", styleSheet="color: #bac2de; font-weight: bold;"))
         self.setups_list = QListWidget()
         self.setups_list.setStyleSheet("background-color: #181825; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px;")
         self.setups_list.itemChanged.connect(self.on_setup_visibility_changed)
         self.setups_list.itemClicked.connect(self.on_setup_selected)
-        left_layout.addWidget(self.setups_list)
+        lists_layout.addWidget(self.setups_list)
 
-        left_layout.addWidget(QLabel("Komentarz i Wytyczne Strategii:", styleSheet="color: #bac2de; font-weight: bold;"))
+        # Dolna część: Opis
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+
+        details_layout.addWidget(QLabel("Komentarz i Wytyczne Strategii:", styleSheet="color: #bac2de; font-weight: bold;"))
         self.details_box = QTextEdit()
         self.details_box.setReadOnly(True)
         self.details_box.setStyleSheet("background-color: #11111b; color: #a6adc8; border: 1px solid #313244; border-radius: 4px; font-family: monospace;")
-        left_layout.addWidget(self.details_box)
+        details_layout.addWidget(self.details_box)
+
+        left_inner_splitter.addWidget(lists_widget)
+        left_inner_splitter.addWidget(details_widget)
+        left_inner_splitter.setSizes([400, 300])
+
+        left_layout.addWidget(left_inner_splitter, stretch=1)
 
         # === PRAWA STRONA: WYKRESY ===
         chart_splitter = QSplitter(Qt.Orientation.Vertical)
-        chart_splitter.setStyleSheet("background-color: #11111b;")
+        chart_splitter.setStyleSheet("background-color: #11111b; QSplitter::handle { background-color: #313244; }")
 
         # NVDA
         self.nvda_container = QWidget()
@@ -305,8 +321,11 @@ class MainWindow(QMainWindow):
         chart_splitter.setCollapsible(1, False)
         chart_splitter.setSizes([450, 450])
 
-        main_layout.addWidget(left_panel, stretch=0)
-        main_layout.addWidget(chart_splitter, stretch=1)
+        main_splitter.addWidget(left_panel)
+        main_splitter.addWidget(chart_splitter)
+        main_splitter.setSizes([420, 1180])
+
+        main_layout.addWidget(main_splitter, stretch=1)
 
         # Ładowanie wykresów
         nvda_html_path = self.base_dir / "chart.html"
@@ -412,11 +431,6 @@ class MainWindow(QMainWindow):
         self.ranges_list.clear()
         self.ranges_list.blockSignals(False)
 
-        # NOWE: Reset listy NASDAQ
-        self.nasdaq_analyses_list.blockSignals(True)
-        self.nasdaq_analyses_list.clear()
-        self.nasdaq_analyses_list.blockSignals(False)
-
         self.setups_list.blockSignals(True)
         self.setups_list.clear()
         self.setups_list.blockSignals(False)
@@ -436,7 +450,6 @@ class MainWindow(QMainWindow):
             
             self.update_market_context()
             self.update_ranges_list()
-            self.update_nasdaq_analyses_list() # NOWE
             self.update_setups_list()
         except Exception as e:
             print(f"Error loading schema: {e}")
@@ -451,7 +464,6 @@ class MainWindow(QMainWindow):
             self.market_context_box.moveCursor(QTextCursor.MoveOperation.Start)
             return
 
-        # Zaktualizowano o nową strukturę (bez current_price i price_ranges)
         text = f"Sentiment: {nasdaq_data.get('sentiment', 'N/A')}\n"
         text += f"Kluczowy poziom (Gatekeeper): {nasdaq_data.get('key_gatekeeper_level', 'N/A')}\n"
         
@@ -471,6 +483,18 @@ class MainWindow(QMainWindow):
         ]
         self.ranges_list.clear()
 
+        # Dodaj analizę NASDAQ jako pierwszy element
+        nasdaq_data = self.schema_data.get("assets", {}).get("NASDAQ", {})
+        nasdaq_analyses = nasdaq_data.get("analyses", [])
+        if nasdaq_analyses:
+            for a in nasdaq_analyses:
+                item = QListWidgetItem(f"[NASDAQ] {a['name']}")
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
+                item.setData(Qt.ItemDataRole.UserRole, {"type": "nasdaq_analysis", "data": a})
+                self.ranges_list.addItem(item)
+
+        # Dodaj poziomy NVDA
         nvda_ranges = self.schema_data.get("assets", {}).get("NVDA", {}).get("price_ranges", [])
         for r in nvda_ranges:
             item = QListWidgetItem(r['name'])
@@ -479,24 +503,11 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Checked)
             else:
                 item.setCheckState(Qt.CheckState.Unchecked)
-            item.setData(Qt.ItemDataRole.UserRole, r)
+            item.setData(Qt.ItemDataRole.UserRole, {"type": "nvda_range", "data": r})
             self.ranges_list.addItem(item)
 
         self.ranges_list.blockSignals(False)
         self.redraw_ranges()
-
-    # NOWE: Metoda ładująca analizy NASDAQ
-    def update_nasdaq_analyses_list(self):
-        self.nasdaq_analyses_list.blockSignals(True)
-        self.nasdaq_analyses_list.clear()
-        
-        nasdaq_analyses = self.schema_data.get("assets", {}).get("NASDAQ", {}).get("analyses", [])
-        for a in nasdaq_analyses:
-            item = QListWidgetItem(a['name'])
-            item.setData(Qt.ItemDataRole.UserRole, a)
-            self.nasdaq_analyses_list.addItem(item)
-            
-        self.nasdaq_analyses_list.blockSignals(False)
 
     def update_setups_list(self):
         self.setups_list.blockSignals(True)
@@ -528,10 +539,18 @@ class MainWindow(QMainWindow):
     def on_range_visibility_changed(self, item):
         self.redraw_ranges()
 
-    # NOWE: Wyświetlanie opisu dla Ranges
     def on_range_selected(self, item):
-        r = item.data(Qt.ItemDataRole.UserRole)
-        self.display_range_details(r)
+        role_data = item.data(Qt.ItemDataRole.UserRole)
+        if not role_data:
+            return
+        
+        item_type = role_data.get("type")
+        data = role_data.get("data")
+        
+        if item_type == "nasdaq_analysis":
+            self.display_nasdaq_analysis_details(data)
+        elif item_type == "nvda_range":
+            self.display_range_details(data)
 
     def on_setup_visibility_changed(self, item):
         self.redraw_setups()
@@ -541,11 +560,6 @@ class MainWindow(QMainWindow):
         self.current_setup = setup
         self.display_setup_details(setup)
 
-    # NOWE: Wyświetlanie opisu dla Analiz NASDAQ
-    def on_nasdaq_analysis_selected(self, item):
-        a = item.data(Qt.ItemDataRole.UserRole)
-        self.display_nasdaq_analysis_details(a)
-
     def redraw_ranges(self):
         if not self.nvda_ready:
             return
@@ -553,28 +567,30 @@ class MainWindow(QMainWindow):
         for i in range(self.ranges_list.count()):
             item = self.ranges_list.item(i)
             if item.checkState() == Qt.CheckState.Checked:
-                r = item.data(Qt.ItemDataRole.UserRole)
-                zone_info = [
-                    {
-                        "top": r["resistance_zone"][1],
-                        "bottom": r["resistance_zone"][0],
-                        "borderColor": r.get("color", "#f38ba8"),
-                        "label": f"RES: {r['name']}"
-                    },
-                    {
-                        "top": r["support_zone"][1],
-                        "bottom": r["support_zone"][0],
-                        "borderColor": r.get("color", "#a6e3a1"),
-                        "label": f"SUP: {r['name']}"
-                    }
-                ]
-                json_str = json.dumps(zone_info)
-                js_command = f"""
-                if(window.showRangeLines){{
-                    window.showRangeLines(`{json_str}`);
-                }}
-                """
-                self.nvda_chart_view.page().runJavaScript(js_command)
+                role_data = item.data(Qt.ItemDataRole.UserRole)
+                if role_data and role_data.get("type") == "nvda_range":
+                    r = role_data.get("data")
+                    zone_info = [
+                        {
+                            "top": r["resistance_zone"][1],
+                            "bottom": r["resistance_zone"][0],
+                            "borderColor": r.get("color", "#f38ba8"),
+                            "label": f"RES: {r['name']}"
+                        },
+                        {
+                            "top": r["support_zone"][1],
+                            "bottom": r["support_zone"][0],
+                            "borderColor": r.get("color", "#a6e3a1"),
+                            "label": f"SUP: {r['name']}"
+                        }
+                    ]
+                    json_str = json.dumps(zone_info)
+                    js_command = f"""
+                    if(window.showRangeLines){{
+                        window.showRangeLines(`{json_str}`);
+                    }}
+                    """
+                    self.nvda_chart_view.page().runJavaScript(js_command)
 
     def redraw_setups(self):
         if not self.nvda_ready:
@@ -612,20 +628,18 @@ class MainWindow(QMainWindow):
                 """
                 self.nvda_chart_view.page().runJavaScript(js_command)
 
-    # NOWE: Formatowanie opisu dla Ranges
+    def display_nasdaq_analysis_details(self, a: dict):
+        text = f"=== ANALIZA NASDAQ: {a['name']} ===\n\n"
+        text += f"{a.get('description', 'Brak opisu.')}\n"
+        self.details_box.setPlainText(text)
+        self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
+
     def display_range_details(self, r: dict):
         text = f"=== POZIOM: {r['name']} ===\n"
         text += f"Ram czasowy (Timeframe): {r.get('timeframe', 'N/A')}\n"
         text += f"Strefa Wsparcia (Support): {r['support_zone']}\n"
         text += f"Strefa Oporu (Resistance): {r['resistance_zone']}\n\n"
         text += f"Opis i Kontekst:\n{r.get('description', 'Brak opisu.')}\n"
-        self.details_box.setPlainText(text)
-        self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
-
-    # NOWE: Formatowanie opisu dla Analiz NASDAQ
-    def display_nasdaq_analysis_details(self, a: dict):
-        text = f"=== ANALIZA NASDAQ: {a['name']} ===\n\n"
-        text += f"{a.get('description', 'Brak opisu.')}\n"
         self.details_box.setPlainText(text)
         self.details_box.moveCursor(QTextCursor.MoveOperation.Start)
 
@@ -662,5 +676,5 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     QWebEngineProfile.defaultProfile().setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
     window = MainWindow()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())

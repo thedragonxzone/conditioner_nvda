@@ -17,11 +17,6 @@
           "id": "nasdaq_analysis_01",
           "name": "Trend, Szerokość Rynku i Filtrowanie",
           "description": "NASDAQ wykazuje oznaki lokalnego wyczerpania i presji rotacji sektorowej, mimo że NVDA próbuje odbijać. Indeks pozostaje filtrem nadrzędnym: stabilizacja lub ruch w górę na NASDAQ aktywuje scenariusze breakoutowe na NVDA, podczas gdy jego osłabienie (rollover) natychmiast zaneguje wysiłki kupujących i sprowokuje mocniejsze cofnięcie na spółkach o wysokiej becie."
-        },
-        {
-          "id": "nasdaq_analysis_02",
-          "name": "Kontekst Makro i Płynność",
-          "description": "Wskaźnik Strachu i Chciwości (Fear & Greed) znajduje się na niskim poziomie 23, co wskazuje na dominację sentymentu negatywnego. W takim środowisku każde odbicie jest traktowane przez rynek jako okazja do sprzedaży, dopóki nie nastąpi wyraźne przełamanie kluczowych oporów i zmiana struktury rynkowej."
         }
       ]
     },
@@ -54,9 +49,9 @@
           "bias": "LONG",
           "conditions": {
             "trigger_zone": [206.00, 209.50],
-            "trigger_condition": "holding_above_206_with_momentum_or_breakout_confirmation_above_209.5",
+            "trigger_condition": "utrzymanie powyżej 206 z impetem lub potwierdzenie wybicia powyżej 209.5",
             "nasdaq_confirmation_price": 18150.0,
-            "nasdaq_confirmation_condition": "nasdaq_remains_constructive_and_semis_firm"
+            "nasdaq_confirmation_condition": "nasdaq pozostaje konstruktywny a półprzewodniki silne"
           },
           "execution": {
             "entry_zone": [206.20, 209.70],
@@ -74,9 +69,9 @@
           "bias": "SHORT",
           "conditions": {
             "trigger_zone": [206.00, 217.90],
-            "trigger_condition": "losing_206_after_failed_209.5_hold_or_sharp_rejection_at_214.5-217.9",
+            "trigger_condition": "utrata poziomu 206 po nieudanym utrzymaniu 209.5 lub gwałtowne odrzucenie na poziomie 214.5-217.9",
             "nasdaq_confirmation_price": 18100.0,
-            "nasdaq_confirmation_condition": "nasdaq_showing_intraday_weakness_and_poor_breadth"
+            "nasdaq_confirmation_condition": "nasdaq wykazuje słabość w ciągu dnia i słabą szerokość rynku"
           },
           "execution": {
             "entry_zone": [205.80, 214.80],
