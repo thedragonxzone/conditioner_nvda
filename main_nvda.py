@@ -27,7 +27,7 @@ import websocket
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QLabel, QListWidget, QListWidgetItem,
-    QTextEdit, QFrame
+    QTextEdit, QFrame, QPushButton
 )
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QObject, QTimer, QUrl
@@ -58,7 +58,7 @@ class BitgetFuturesClient(QThread):
     def __init__(self):
         super().__init__()
         self.running = True
-
+        
         # Monitorowane aktywa i ich aktualny interwał
         self.monitored_assets = {
             "NVDA": {"ticker": "NVDAUSDT", "interval": "1m", "last_ts": 0}
@@ -534,18 +534,57 @@ class MainWindow(QMainWindow):
         nvda_lay.addWidget(self.nvda_chart_view, stretch=1)
 
         # NASDAQ
+                # === NASDAQ ===
         self.nasdaq_container = QWidget()
         nasdaq_lay = QVBoxLayout(self.nasdaq_container)
         nasdaq_lay.setContentsMargins(0, 0, 0, 0)
         nasdaq_lay.setSpacing(0)
 
+        # 1. Nagłówek z etykietą i przyciskiem Toggle
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
         self.nasdaq_label = QLabel("NASDAQ-100 (TradingView CFD) - Podgląd rynku")
         self.nasdaq_label.setStyleSheet("background-color: #11111b; color: #a6adc8; padding: 6px; font-weight: bold;")
         self.nasdaq_label.setFixedHeight(28)
-        self.nasdaq_chart_view = QWebEngineView()
+        header_layout.addWidget(self.nasdaq_label, stretch=1)
 
-        nasdaq_lay.addWidget(self.nasdaq_label)
-        nasdaq_lay.addWidget(self.nasdaq_chart_view, stretch=1)
+        self.tv_toggle_btn = QPushButton("Włącz TradingView")
+        self.tv_toggle_btn.setFixedHeight(28)
+        self.tv_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tv_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1; color: #11111b; border: none; padding: 4px 12px;
+                font-weight: bold; border-radius: 4px; margin-right: 5px;
+            }
+            QPushButton:hover { background-color: #94e2d5; }
+            QPushButton:pressed { background-color: #89dceb; }
+        """)
+        self.tv_toggle_btn.clicked.connect(self.toggle_tradingview)
+        header_layout.addWidget(self.tv_toggle_btn)
+        
+        nasdaq_lay.addLayout(header_layout)
+
+        # 2. Kontener na wykres (lub placeholder gdy wyłączony)
+        self.nasdaq_chart_container = QWidget()
+        self.nasdaq_chart_container.setStyleSheet("background-color: #000000;")
+        self.nasdaq_chart_lay = QVBoxLayout(self.nasdaq_chart_container)
+        self.nasdaq_chart_lay.setContentsMargins(0, 0, 0, 0)
+
+        # Placeholder informujący o wyłączeniu
+        self.tv_placeholder = QLabel("TradingView jest wyłączony.\nKliknij przycisk powyżej, aby załadować wykres (oszczędzanie CPU).")
+        self.tv_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.tv_placeholder.setStyleSheet("color: #6c7086; font-size: 14px; background-color: #11111b;")
+        self.nasdaq_chart_lay.addWidget(self.tv_placeholder)
+
+        nasdaq_lay.addWidget(self.nasdaq_chart_container, stretch=1)
+
+        # Zmienne stanu
+        self.nasdaq_chart_view = None
+        self.tv_is_active = False
+        
+        # Opcjonalnie: Jeśli chcesz, aby TradingView ładował się AUTOMATYCZNIE przy starcie programu,
+        # odkomentuj poniższą linię. Na razie domyślnie jest wyłączony, żeby nie obciążać CPU na starcie.
+        # QTimer.singleShot(1500, self.toggle_tradingview)
 
         chart_splitter.addWidget(self.nvda_container)
         chart_splitter.addWidget(self.nasdaq_container)
@@ -563,8 +602,9 @@ class MainWindow(QMainWindow):
         self.nvda_chart_view.setUrl(QUrl.fromLocalFile(str(nvda_html_path)))
         self.nvda_chart_view.loadFinished.connect(self.on_nvda_chart_load_finished)
 
-        nasdaq_html_content = self.generate_tradingview_html()
-        self.nasdaq_chart_view.setHtml(nasdaq_html_content, QUrl("https://s3.tradingview.com"))
+        #ładowanie auto-nasdaq zakomentowane
+        #nasdaq_html_content = self.generate_tradingview_html()
+        #self.nasdaq_chart_view.setHtml(nasdaq_html_content, QUrl("https://s3.tradingview.com"))
 
     def generate_tradingview_html(self) -> str:
         settings = {
@@ -583,7 +623,7 @@ class MainWindow(QMainWindow):
             "height": "100%",
             "studies": [
                 "VWAP@tv-basicstudies",
-                "PivotPointsStandard@tv-basicstudies"
+                #"PivotPointsStandard@tv-basicstudies"
             ]
         }
         studies_overrides = {}
@@ -591,6 +631,7 @@ class MainWindow(QMainWindow):
         overrides_json = json.dumps(studies_overrides)
 
         return f"""
+
 <!DOCTYPE html>
 <html style="margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;">
 <head>
@@ -616,6 +657,52 @@ try {{
 </body>
 </html>
 """
+    
+    def toggle_tradingview(self):
+        """Dynamicznie ładuje lub niszczy widget TradingView, aby oszczędzać CPU."""
+        if self.tv_is_active:
+            # --- WYŁĄCZANIE (Zwalnianie zasobów CPU/RAM) ---
+            if self.nasdaq_chart_view:
+                self.nasdaq_chart_lay.removeWidget(self.nasdaq_chart_view)
+                self.nasdaq_chart_view.stop()          # Zatrzymaj ewentualne ładowanie
+                self.nasdaq_chart_view.deleteLater()   # Kluczowe: zwalnia proces Chromium w tle!
+                self.nasdaq_chart_view = None
+            
+            self.tv_placeholder.show()
+            self.tv_is_active = False
+            
+            # Zmiana wyglądu przycisku na "Włącz"
+            self.tv_toggle_btn.setText("Włącz TradingView")
+            self.tv_toggle_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #a6e3a1; color: #11111b; border: none; padding: 4px 12px;
+                    font-weight: bold; border-radius: 4px; margin-right: 5px;
+                }
+                QPushButton:hover { background-color: #94e2d5; }
+            """)
+        else:
+            # --- WŁĄCZANIE (Tworzenie i ładowanie) ---
+            self.tv_placeholder.hide()
+            
+            # Tworzymy nowy obiekt QWebEngineView
+            self.nasdaq_chart_view = QWebEngineView()
+            self.nasdaq_chart_lay.addWidget(self.nasdaq_chart_view)
+            
+            # Ładujemy HTML z TradingView
+            nasdaq_html_content = self.generate_tradingview_html()
+            self.nasdaq_chart_view.setHtml(nasdaq_html_content, QUrl("https://s3.tradingview.com"))
+            
+            self.tv_is_active = True
+            
+            # Zmiana wyglądu przycisku na "Wyłącz"
+            self.tv_toggle_btn.setText("Wyłącz TV")
+            self.tv_toggle_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f38ba8; color: #11111b; border: none; padding: 4px 12px;
+                    font-weight: bold; border-radius: 4px; margin-right: 5px;
+                }
+                QPushButton:hover { background-color: #eba0ac; }
+            """)
 
     def handle_interval_change(self, asset_id: str, new_interval: str):
         """
@@ -845,7 +932,7 @@ if(window.showRangeLines){{
                     "top": s["execution"]["entry_zone"][1],
                     "bottom": s["execution"]["entry_zone"][0],
                     "borderColor": "#f9e2af",
-                    "label": f"ENTRY ({s['id']})"
+                    "label": f"Wejście ({s['id']})"
                 })
                 lines.append({
                     "top": s["execution"]["stop_loss_zone"][1],
