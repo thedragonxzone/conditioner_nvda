@@ -921,39 +921,79 @@ if(window.showRangeLines){{
     def redraw_setups(self):
         if not self.nvda_ready:
             return
+
+        # Ukrywamy stare linie setupów na wykresie
         self.nvda_chart_view.page().runJavaScript("if(window.hideSetupLines){window.hideSetupLines();}")
 
+        lines_to_draw = []
+        
+        # Iterujemy po wszystkich elementach listy i rysujemy tylko te zaznaczone (Checked)
         for i in range(self.setups_list.count()):
             item = self.setups_list.item(i)
             if item.checkState() == Qt.CheckState.Checked:
-                s = item.data(Qt.ItemDataRole.UserRole)
-                lines = []
-                lines.append({
-                    "top": s["execution"]["entry_zone"][1],
-                    "bottom": s["execution"]["entry_zone"][0],
-                    "borderColor": "#f9e2af",
-                    "label": f"Wejście ({s['id']})"
-                })
-                lines.append({
-                    "top": s["execution"]["stop_loss_zone"][1],
-                    "bottom": s["execution"]["stop_loss_zone"][0],
-                    "borderColor": "#f38ba8",
-                    "label": "SL"
-                })
-                for idx, tp in enumerate(s["execution"]["take_profit_zones"]):
-                    lines.append({
-                        "top": tp[1],
-                        "bottom": tp[0],
-                        "borderColor": "#a6e3a1",
-                        "label": f"TP{idx+1}"
+                setup = item.data(Qt.ItemDataRole.UserRole)
+                if not setup:
+                    continue
+                
+                bias = setup.get("bias", "LONG").upper()
+                
+                # Dobór kolorów i podstawowych etykiet
+                if bias == "LONG":
+                    border_color = "rgba(255, 255, 10, 0.8)"  # Wyrazisty zielony
+                    label_prefix = "LONG"
+                    entry_prefix = "🟢 LONG"  # Dodatkowy znaczek TYLKO dla Entry
+                else:
+                    border_color = "rgba(255, 255, 10, 0.8)" # Wyrazisty czerwony
+                    label_prefix = "SHORT"
+                    entry_prefix = "🔴 SHORT" # Dodatkowy znaczek TYLKO dla Entry
+
+                name = setup.get("name", "")
+                execution = setup.get("execution", {})
+                
+                # Strefa Entry (używa 'entry_prefix' ze znaczkiem)
+                entry_zone = execution.get("entry_zone", [])
+                if len(entry_zone) == 2:
+                    t, b = float(entry_zone[1]), float(entry_zone[0])
+                    lines_to_draw.append({
+                        "top": t,
+                        "bottom": b,
+                        "isRange": t != b,
+                        "borderColor": border_color,
+                        "label": f"{entry_prefix} ({name}) Entry"
                     })
-                json_str = json.dumps(lines)
-                js_command = f"""
+
+                # Strefa SL (używa standardowego 'label_prefix' bez znaczka)
+                sl_zone = execution.get("stop_loss_zone", [])
+                if len(sl_zone) == 2:
+                    t, b = float(sl_zone[1]), float(sl_zone[0])
+                    lines_to_draw.append({
+                        "top": t,
+                        "bottom": b,
+                        "isRange": t != b,
+                        "borderColor": "rgba(239, 83, 80, 0.8)",
+                        "label": f"{label_prefix} SL"
+                    })
+
+                # Strefy TP (używają standardowego 'label_prefix' bez znaczka)
+                tp_zones = execution.get("take_profit_zones", [])
+                for idx, tp in enumerate(tp_zones):
+                    if len(tp) == 2:
+                        t, b = float(tp[1]), float(tp[0])
+                        lines_to_draw.append({
+                            "top": t,
+                            "bottom": b,
+                            "isRange": t != b,
+                            "borderColor": "rgba(38, 166, 154, 0.8)",
+                            "label": f"{label_prefix} TP{idx+1}"
+                        })
+        if lines_to_draw:
+            json_str = json.dumps(lines_to_draw)
+            js_command = f"""
 if(window.showSetupLines){{
     window.showSetupLines(`{json_str}`);
 }}
 """
-                self.nvda_chart_view.page().runJavaScript(js_command)
+            self.nvda_chart_view.page().runJavaScript(js_command)
 
     def display_nasdaq_analysis_details(self, a: dict):
         text = f"=== ANALIZA NASDAQ: {a['name']} ===\n"

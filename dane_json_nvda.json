@@ -1,99 +1,139 @@
 {
   "metadata": {
-    "timestamp": "2026-07-14T16:50:00Z",
+    "timestamp": "2026-07-15T15:40:00Z",
     "primary_ticker": "NVDA",
     "macro_ticker": "NQ=F"
   },
   "macro_environment": {
-    "fear_and_greed_index": 28,
-    "market_sentiment": "neutral-to-bearish-intraday"
+    "fear_and_greed_index": 38,
+    "market_sentiment": "neutral-to-bullish-intraday"
   },
   "assets": {
     "NASDAQ": {
-      "sentiment": "risk-off-weakness",
+      "sentiment": "rebound-strength",
       "key_gatekeeper_level": 25873.18,
       "analyses": [
         {
           "id": "nasdaq_analysis_01",
-          "name": "Presja Makro i Wrażliwość na Stopy Procentowe",
-          "description": "Szeroki rynek technologiczny znajduje się pod wyraźną presją podaży, co potwierdza spadek indeksu NASDAQ Composite do poziomu 25 873,18 pkt (spadek o 1,55%). Osłabienie wynika bezpośrednio z nastrojów typu risk-off, rosnących rentowności obligacji skarbowych oraz podwyższonej wrażliwości inwestorów na nadchodzące odczyty inflacyjne (CPI). Sektor półprzewodników, jako jedna z grup najbardziej podatnych na zmiany stóp procentowych oraz napędzana dotychczas silnym momentum, natychmiast odczuwa odpływ kapitału, co bezpośrednio rzutuje na zachowanie NVDA pełniącej rolę wskaźnika beta dla całego indeksu."
+          "name": "Odbicie Technologiczne i Powrót do Wzrostów",
+          "description": "Szeroki rynek technologiczny zanotował wyraźne odreagowanie po wcześniejszej presji podaży wywołanej napięciami geopolitycznymi na Bliskim Wschodzie. Indeks NASDAQ Composite odbił o 0,90% i zamknął sesję na poziomie 26 107,01 pkt, a w trakcie kolejnej sesji kontynuował ruch w kierunku 26 245 pkt. Kluczem dla byków było oddalenie się od ważnego wsparcia na poziomie 25 873,18 pkt. Choć rynki dłużne pozostają napięte (rentowność 10-letnich obligacji skarbowych USA wynosi ok. 4,56%), inwestorzy pozytywnie zareagowali na napływające dane makro, w tym dane o inflacji oraz startujący sezon wyników finansowych. Powrót apetytu na ryzyko natychmiast przełożył się na zwyżki liderów technologicznych o wysokim współczynniku beta, na czele z Nvidią."
         },
         {
           "id": "ai_nvda_hype_sentiment_2026",
-          "name": "Sentyment AI: Krótkoterminowa Ostrożność vs Długoterminowy Hype",
-          "description": "Aktualny sentyment wokół sektora sztucznej inteligencji wykazuje lokalne oznaki kruchości i schłodzenia (rozczarowanie niedawną słabością innych podmiotów z branży chipów AI), jednak długoterminowa teza o strukturalnym popycie na infrastrukturę AI pozostaje nienaruszona. Na rynku opcji widoczna jest stała aktywność popytowa wokół poziomu 220 USD, co pokazuje, że inwestorzy instytucjonalni wciąż traktują głębsze korekty jako okazje do akumulacji. Nie mamy do czynienia z trwałym pęknięciem bańki, lecz z rygorystyczną reewaluacją wycen w otoczeniu niesprzyjających czynników makroekonomicznych."
+          "name": "Sentyment AI: Nowe Regulacje i Ograniczony Optymizm",
+          "description": "Ogólny sentyment wokół sztucznej inteligencji i samej Nvidii pozostaje bardzo mocny (konsensus analityków to wciąż 'Strong Buy'). Ostatnie dni przyniosły jednak istotne zmiany regulacyjne, które rynek próbuje zdyskontować. Z jednej strony, Nvidia podjęła radykalne kroki w celu uszczelnienia sankcji eksportowych, eliminując ponad połowę swoich autoryzowanych klientów w Azji (m.in. w Singapurze i Malezji), aby zapobiec nielegalnemu handlowi chipami AI z Chinami. Z drugiej strony, Departament Handlu USA wydał rzadkie i wyczekiwane zgody na zakup chipów H200 dla wybranych chińskich koncernów, takich jak ZTE Kangxun oraz Maginfra. Inwestorzy odebrali to jako sygnał częściowego ocieplenia stosunków handlowych przed nadchodzącym szczytem USA-Chiny. Na rynku opcji obserwuje się wzmożoną aktywność inwestorów pozycjonujących się pod potencjalny breakout, zwłaszcza przy wykorzystaniu opcji call ze strikiem w okolicach 220 USD, co oddala wizję rozczarowania i podtrzymuje strukturalny popyt."
         }
       ]
     },
     "NVDA": {
-      "current_price": 204.90,
+      "current_price": 211.53,
       "price_ranges": [
         {
           "id": "range_intraday_01",
           "name": "Wewnętrzny Przedział Intraday",
-          "support_zone": [203.00, 203.20],
-          "resistance_zone": [205.30, 206.00],
+          "support_zone": [210.50, 211.00],
+          "resistance_zone": [213.60, 214.00],
           "timeframe": "1h",
           "color": "#89dceb",
-          "description": "Kurs NVDA porusza się wewnątrz konsolidacji intraday (zakres 203.23 – 205.32 USD), znajdując się w kluczowej strefie decyzyjnej. Rynek odnotował umiarkowany spadek o 1,28% w skali 24-godzinnej, broniąc wsparcia 203 USD, lecz nie wykazując jeszcze siły do trwałego przełamania górnego ograniczenia."
+          "description": "Kurs NVDA konsoliduje się w rejonie 211.53 USD, niemal dokładnie w środku dziennego pasma wahań (210.54 – 213.57 USD). Stanowi to klasyczną strefę wyczekiwania i decyzji. Kluczową barierą dla byków jest poziom 214 USD – jego trwałe odzyskanie otworzy drogę do wyższych poziomów konsolidacji."
         },
         {
           "id": "range_swing_02",
           "name": "Szeroki Zakres Swingowy (1-3 Dni)",
-          "support_zone": [200.00, 200.80],
-          "resistance_zone": [208.50, 210.00],
+          "support_zone": [208.50, 210.00],
+          "resistance_zone": [218.50, 220.00],
           "timeframe": "1h",
           "color": "#b4befe",
-          "description": "Główny obszar roboczy dla najbliższych sesji zamyka się w granicach 200.00 - 210.00 USD. Ewentualne wyjście górą przy poprawie nastrojów na NASDAQ otwiera drogę do strefy 214.50 - 220.00 USD. Z kolei kapitulacja poziomu 203 USD uruchomi podaż w kierunku okrągłej bariery 200.00 USD oraz rejonu 195.70 - 197.50 USD."
+          "description": "Szeroki, roboczy zakres wahań dla najbliższych sesji to przedział 208 – 220 USD. Opuszczenie go górą otworzy drogę do strefy rozszerzenia 222.50 – 228.00 USD, wspierane przez pozytywne katalizatory popytowe na rynku AI. Z kolei wyłamanie dołem grozi gwałtownym cofnięciem w kierunku 205.00 – 200.00 USD, zwłaszcza przy jednoczesnym osłabieniu indeksu NASDAQ."
         }
       ],
       "setups": [
         {
-          "id": "setup_nvda_long_dip_buy",
-          "name": "Preferred Long: Support Dip-Buy",
+          "id": "setup_nvda_long_support_hold",
+          "name": "Long: Support Hold",
           "bias": "LONG",
           "conditions": {
-            "trigger_zone": [203.30, 203.60],
-            "trigger_condition": "Zakup na korekcie w strefie pierwszego wsparcia pod warunkiem obrony 203 USD.",
-            "nasdaq_confirmation_price": 25873.18,
-            "nasdaq_confirmation_condition": "Indeks NASDAQ stabilizuje się i powstrzymuje dalszą wyprzedaż intraday."
+            "trigger_zone": [211.20, 211.80],
+            "trigger_condition": "Potwierdzenie utrzymania strefy wsparcia 210.50 - 211.00 USD na interwale intraday.",
+            "nasdaq_confirmation_price": 26245.26,
+            "nasdaq_confirmation_condition": "NASDAQ wykazuje siłę, a kontrakty terminowe poruszają się w zielonej strefie."
           },
           "execution": {
-            "entry_zone": [203.30, 203.60],
-            "stop_loss_zone": [199.40, 199.40],
+            "entry_zone": [211.20, 211.80],
+            "stop_loss_zone": [208.90, 208.90],
             "take_profit_zones": [
-              [205.30, 205.30],
-              [208.80, 208.80]
+              [216.80, 216.80],
+              [219.80, 219.80]
             ]
           },
-          "commentary": "Czysta struktura dip-buy z ciasną negacją poniżej 199.40 USD. Alternatywne głębokie wejście (Entry B) znajduje się w przedziale 200.20 - 201.00 USD w razie chwilowego czyszczenia płynności."
+          "commentary": "Wejście o wysokim prawdopodobieństwie, pozwalające uniknąć przepłacania za pozycję przed faktycznym breakoutem. Target maksymalny w przypadku silnego impulsu to 223.00 USD."
+        },
+        {
+          "id": "setup_nvda_long_breakout",
+          "name": "Breakout Long",
+          "bias": "LONG",
+          "conditions": {
+            "trigger_zone": [214.10, 214.60],
+            "trigger_condition": "Wyjście ceny ponad dotychczasowy lokalny szczyt i zmiana oporu 214 USD we wsparcie.",
+            "nasdaq_confirmation_price": 26245.26,
+            "nasdaq_confirmation_condition": "Indeks technologiczny dynamicznie rośnie, tworząc nowe maksima sesyjne."
+          },
+          "execution": {
+            "entry_zone": [214.10, 214.60],
+            "stop_loss_zone": [208.90, 208.90],
+            "take_profit_zones": [
+              [216.80, 216.80],
+              [219.80, 219.80]
+            ]
+          },
+          "commentary": "Droższy, lecz bezpieczniejszy kierunkowo setup typu momentum. Aktywowany dopiero po pełnym technicznym potwierdzeniu wyjścia górą z konsolidacji. Target rozszerzony (stretch target) wynosi 223.00 USD."
         },
         {
           "id": "setup_nvda_short_rejection",
-          "name": "Preferred Short: Resistance Fade",
+          "name": "Rejection Short",
           "bias": "SHORT",
           "conditions": {
-            "trigger_zone": [205.30, 205.90],
-            "trigger_condition": "Odrzucenie wzrostów i brak siły na pokonanie oporu w rejonie 205.30 - 206.00 USD.",
-            "nasdaq_confirmation_price": 25873.18,
-            "nasdaq_confirmation_condition": "NASDAQ pozostaje słaby, a sentyment risk-off dominuje na rynku szerokim."
+            "trigger_zone": [213.80, 214.30],
+            "trigger_condition": "Test i odrzucenie lokalnego szczytu w rejonie 214.00 USD, połączone ze spadkiem wolumenu zakupowego.",
+            "nasdaq_confirmation_price": 26245.26,
+            "nasdaq_confirmation_condition": "NASDAQ cofa się ze szczytów lub wykazuje oznaki wyczerpania popytu."
           },
           "execution": {
-            "entry_zone": [205.30, 205.90],
-            "stop_loss_zone": [211.20, 211.20],
+            "entry_zone": [213.80, 214.30],
+            "stop_loss_zone": [215.80, 215.80],
             "take_profit_zones": [
-              [203.20, 203.20],
-              [200.80, 200.80]
+              [210.80, 210.80],
+              [208.40, 208.40]
             ]
           },
-          "commentary": "Strategia sell-rally jest lekko faworyzowana ze względu na niedźwiedzi kontekst makro. Drugi potencjalny punkt wejścia w krótkie pozycje (Entry B) plasuje się na poziomach 208.50 - 209.80 USD przy lokalnym wyciśnięciu stop-lossów."
+          "commentary": "Precyzyjny trade nastawiony na grę przeciwko trendowi (fade) tuż pod kluczowym oporem. Zlecenie Stop Loss powyżej 215.80 USD bezwzględnie chroni przed scenariuszem silnego breakoutu. Target rozszerzony wynosi 205.50 USD."
+        },
+        {
+          "id": "setup_nvda_short_fade",
+          "name": "Fade Short",
+          "bias": "SHORT",
+          "conditions": {
+            "trigger_zone": [218.80, 219.80],
+            "trigger_condition": "Nagły skok ceny (spike) w wyższy obszar oporu i brak kontynuacji popytowej.",
+            "nasdaq_confirmation_price": 26245.26,
+            "nasdaq_confirmation_condition": "Szeroki rynek technologiczny traci dynamikę lub zaczyna przeważać na nim podaż."
+          },
+          "execution": {
+            "entry_zone": [218.80, 219.80],
+            "stop_loss_zone": [221.20, 221.20],
+            "take_profit_zones": [
+              [210.80, 210.80],
+              [208.40, 208.40]
+            ]
+          },
+          "commentary": "Agresywny setup pod odrzucenie wyższego pasma oporu. Pozycja ma sens wyłącznie przy jednoczesnym słabnięciu indeksu NASDAQ-100. Target rozszerzony wynosi 205.50 USD."
         }
       ],
       "correlation_context": {
         "divergence_warning": {
           "is_active": true,
           "type": "high_beta_follower_stretch",
-          "description": "NVDA działa obecnie jak bezpośrednie, lewarowane odzwierciedlenie nastrojów na NASDAQ. Skuteczna egzekucja planu wymaga ciągłego monitorowania kondycji indeksu technologicznego i unikania agresywnego rozgrywania pozycji bez potwierdzenia rynkowego."
+          "description": "Nvidia silnie reaguje na przepływy kapitałowe indeksu NASDAQ. Przy obecnej pozycji kursu w samym środku konsolidacji, kluczem do sukcesu jest unikanie pochopnego otwierania pozycji w strefie szumu i ścisłe reagowanie na zachowanie ceny na krawędziach przedziału 211.20 - 214.30 USD."
         }
       }
     }

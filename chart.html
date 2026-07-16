@@ -216,23 +216,40 @@
                 const lines = JSON.parse(jsonStr);
                 if (!Array.isArray(lines)) return;
                 lines.forEach(line => {
-                    const topLine = candleSeries.createPriceLine({
-                        price: line.top,
-                        color: line.borderColor,
-                        lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Solid,
-                        axisLabelVisible: true,
-                        title: line.label || '',
-                    });
-                    const bottomLine = candleSeries.createPriceLine({
-                        price: line.bottom,
-                        color: line.borderColor,
-                        lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Solid,
-                        axisLabelVisible: true,
-                        title: '',
-                    });
-                    currentSetupLines.push(topLine, bottomLine);
+                    const baseLabel = line.label || '';
+                    
+                    if (line.isRange === false || line.top === line.bottom) {
+                        // Przypadek 1: Jedna linia (brak zakresu / identyczne ceny)
+                        const singleLine = candleSeries.createPriceLine({
+                            price: line.top,
+                            color: line.borderColor,
+                            lineWidth: 1.5, // Nieco grubsza dla pojedynczej linii
+                            lineStyle: LightweightCharts.LineStyle.Solid,
+                            axisLabelVisible: true,
+                            title: baseLabel, // Czysta etykieta bez (max)/(min)
+                        });
+                        currentSetupLines.push(singleLine);
+                    } else {
+                        // Przypadek 2: Rzeczywisty zakres (dwie różne ceny)
+                        const topLine = candleSeries.createPriceLine({
+                            price: line.top,
+                            color: line.borderColor,
+                            lineWidth: 1,
+                            lineStyle: LightweightCharts.LineStyle.Solid,
+                            axisLabelVisible: true,
+                            title: baseLabel ? `${baseLabel} (max)` : 'max',
+                        });
+                        
+                        const bottomLine = candleSeries.createPriceLine({
+                            price: line.bottom,
+                            color: line.borderColor,
+                            lineWidth: 1,
+                            lineStyle: LightweightCharts.LineStyle.Dashed, // Przerywana dla dolnej granicy
+                            axisLabelVisible: true,
+                            title: baseLabel ? `${baseLabel} (min)` : 'min',
+                        });
+                        currentSetupLines.push(topLine, bottomLine);
+                    }
                 });
             } catch (e) {
                 console.log("DEBUG_JS: showSetupLines error: " + e);
